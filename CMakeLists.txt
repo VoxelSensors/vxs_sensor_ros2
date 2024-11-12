@@ -23,7 +23,7 @@ list(APPEND AMENT_LIBS image_transport)
 find_package(std_msgs REQUIRED)
 list(APPEND AMENT_LIBS std_msgs)
 
-list(APPEND NODE_INCLUDE_DIRS include)
+list(APPEND VXS_NODE_INCLUDE_DIRS src)
 
 #Find VXS SDK
 message( "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
@@ -36,8 +36,13 @@ else()
   message("VXSDK not found!")
 endif()
 
-include_directories(${NODE_INCLUDE_DIRS})
-add_executable(vxs_node src/vxs_node.cpp)
+include_directories(${VXS_NODE_INCLUDE_DIRS})
+set(VXS_NODE_SOURCES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vxs_node.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vxs_node.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vxs_node_main.cpp)
+
+add_executable(vxs_node ${VXS_NODE_SOURCES})
 ament_target_dependencies(vxs_node ${AMENT_LIBS})
 target_link_libraries(vxs_node ${OTHER_LIBS})
 
