@@ -6,6 +6,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 
+#include <SDK2.h>
+
 using namespace std::chrono_literals;
 
 class VxsPublisher : public rclcpp::Node
@@ -30,6 +32,7 @@ private:
     size_t count_;
 
     void TimerCB();
+    bool InitSensor(const std::string &cam_config_json, const std::string &cam_calib_json);
 };
 
 void VxsPublisher::TimerCB()
@@ -38,6 +41,28 @@ void VxsPublisher::TimerCB()
     message.data = "Hello, world! " + std::to_string(count_++);
     RCLCPP_INFO(this->get_logger(), "Publishing: '%s'", message.data.c_str());
     publisher_->publish(message);
+}
+
+bool InitSennsor(const std::string &cam_config_json, const std::string &cam_calib_json)
+{
+    int FPS = 25;
+    // uint32_t bytes_to_fetch = 2 * 1024 * 1024;
+    vxsdk::pipelineType pipeline_type = vxsdk::pipelineType::fbPointcloud; // @TODO: For now, need a pointcloud...
+
+    // Set the frame rate - used only in the case of frame based rendering
+    vxsdk::vxSetFPS(FPS);
+    // Set the amount of bytes to fetch - used only in the case of data based rendering
+    // vxsdk::vxSetBytesToFetch(bytesToFetch);
+
+    // Start the SDK Engine.
+    // @TODO: Capture/handle the return value (number of cameras)
+    // @TODO: Now calibration file is **ONE**
+    int cam_num = vxsdk::vxStartSystem( //
+        cam_config_json.c_str(),        //
+        cam_calib_json.c_str(),         //
+        pipeline_type);
+
+    return cam_num > 0;
 }
 
 int main(int argc, char *argv[])
