@@ -5,41 +5,90 @@
 
 namespace vxs_ros
 {
-    VvxsSensorPublisher::VxsSensorPublisher() : Node("vxs_sensor"), num_cams_(0)
+    VxsSensorPublisher::VxsSensorPublisher() :                                 //
+                                               Node("vxs_sensor"),             //
+                                               num_cams_(0),                   //
+                                               frame_polling_thread_(nullptr), //
+                                               flag_shutdown_request_(false)
     {
+        std::string package_share_directory = ament_index_cpp::get_package_share_directory("vxs_sensor");
+        RCLCPP_INFO_STREAM(this->get_logger(), "Package share directory: " << package_share_directory);
         // Declare & Get parameters
-        this->declare_parameter("fps", rclcpp::PARAMETER_INTEGGER);
+        this->declare_parameter("fps", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("config_json", rclcpp::PARAMETER_STRING);
         this->declare_parameter("calib_json", rclcpp::PARAMETER_STRING);
 
         // Retrieve params
-        rclcpp::Parameter fps_param = this->get_parameter("fps");
-        rclcpp::Parameter config_json_param = this->get_parameter("config_json");
-        rclcpp::Parameter calib_json_param = this->get_parameter("calib_json");
+        rclcpp::Parameter fps_param;
+        if (!this->get_parameter("fps", fps_param))
+        {
+            fps_ = 30;
+            RCLCPP_INFO_STREAM(this->get_logger(), "Fps not specified. Using " << fps_ << " frames per second.");
+        }
+        else
+        {
+            fps_ = fps_param.as_int();
+            RCLCPP_INFO_STREAM(this->get_logger(), "Fps set to " << fps_);
+        }
 
-        fps_ = fps_param.as_int();
-        config_json_ = config_json_param.as_string();
-        calib_json_ = calib_json_param.as_string();
+        rclcpp::Parameter config_json_param;
+        if (!this->get_parameter("config_json", config_json_param))
+        {
+            config_json_ = "config/and2_median_golden.json";
+            RCLCPP_INFO_STREAM(this->get_logger(), "Config JSON not specified. Using default: " << config_json_);
+        }
+        else
+        {
+            config_json_ = config_json_param.as_string();
+            RCLCPP_INFO_STREAM(this->get_logger(), "Config JSON is " << config_json_);
+        }
+
+        rclcpp::Parameter calib_json_param;
+        if (!this->get_parameter("calib_json", calib_json_param))
+        {
+            calib_json_ = "config/default_calib.json";
+            RCLCPP_INFO_STREAM(this->get_logger(), "Calibration JSON not specified. Using default: " << calib_json_);
+        }
+        else
+        {
+            calib_json_ = calib_json_param.as_string();
+            RCLCPP_INFO_STREAM(this->get_logger(), "Calibration JSON is " << calib_json_);
+        }
 
         // Initialize Sensor
-        InitSensor();
+        if (!InitSensor())
+        {
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Sensor initialization failed!");
+            rclcpp::shutdown();
+        }
 
-        // Initialize publishing thread
-        publishing_thread_ = std::make_shared<std::thread>(&PublisherLoop);
+        // Initialize & start polling thread
+        frame_polling_thread_ = std::make_shared<std::thread>(std::bind(&VxsSensorPublisher::FramePollingLoop, this));
 
         publisher_ = this->create_publisher<std_msgs::msg::String>("vxs_data", 10);
-        timer_ = this->create_wall_timer( //
-            500ms,                        //
-            std::bind(                    //
-                &VxsPublisher::TimerCB,   //
-                this)                     //
+        timer_ = this->create_wall_timer(     //
+            500ms,                            //
+            std::bind(                        //
+                &VxsSensorPublisher::TimerCB, //
+                this)                         //
         );
+    }
+
+    VxsSensorPublisher::~VxsSensorPublisher()
+    {
+        if (frame_polling_thread_)
+        {
+            if (frame_polling_thread_->joinable())
+            {
+                frame_polling_thread_->join();
+            }
+        }
     }
 
     void VxsSensorPublisher::TimerCB()
     {
         auto message = std_msgs::msg::String();
-        message.data = "Hello, world! " + std::to_string(count_++);
+        message.data = "Hello, world! "; // + std::to_string(count_++);
         RCLCPP_INFO(this->get_logger(), "Publishing: '%s'", message.data.c_str());
         publisher_->publish(message);
     }
@@ -62,27 +111,28 @@ namespace vxs_ros
 
     void VxsSensorPublisher::FramePublisherLoop()
     {
-        while (!shutdown_)
+        while (!flag_shutdown_request_)
         {
             // @TODO: Publish depth images and sensor params here...
         }
     }
 
-    void VxsSensorPublisher::FramePollinmgLoop()
+    void VxsSensorPublisher::FramePollingLoop()
     {
-        while (!shutdown_request_)
+        flag_in_polling_loop_ = true;
+        while (!flag_shutdown_request_)
         {
             // @TODO: Poll sensor and and hold back...
 
             std::unique_lock<std::mutex> sensor_lock(sensor_mutex_);
             // Block the thread if no data is available from the sensor
-            cv_process_item.wait(
+            cvar_sensor_poll_.wait(
                 sensor_lock,
                 [this]()
-                { return vxsdk::vxCheckForData() || shutdown_request_; });
-            if (shutdown_request_)
+                { return vxsdk::vxCheckForData() || flag_shutdown_request_; });
+            if (flag_shutdown_request_)
             {
-                rgbd_data_lock.unlock();
+                sensor_lock.unlock();
                 continue;
             }
 
@@ -94,6 +144,7 @@ namespace vxs_ros
 
             // @TODO: Maybe add data to queue or simply publish here...
         }
+        flag_in_polling_loop_ = false;
     }
 
 } // end namespace vxs_ros

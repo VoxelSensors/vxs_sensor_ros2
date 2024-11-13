@@ -10,10 +10,12 @@
 #ifndef VX_SENSOR_HPP
 #define VX_SENSOR_HPP
 
+#include <condition_variable>
 #include <memory>
 #include <thread>
 #include <string>
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 
@@ -21,13 +23,14 @@
 
 using namespace std::chrono_literals;
 
-namespace vxs_sensor
+namespace vxs_ros
 {
     class VxsSensorPublisher : public rclcpp::Node
     {
 
     public:
         VxsSensorPublisher();
+        ~VxsSensorPublisher();
 
     private:
         //! Frame publishing thread
@@ -50,12 +53,20 @@ namespace vxs_sensor
         //! Sensor mutex
         std::mutex sensor_mutex_;
 
+        //! Condition variable for the sensor polling thread
+        std::condition_variable cvar_sensor_poll_;
+
+        //! Shut down request flag
+        bool flag_shutdown_request_;
+        //! Flag indicating execution is inside the polling loop.
+        bool flag_in_polling_loop_;
+
         bool InitSensor();
         void TimerCB();
         void FramePublisherLoop();
         void FramePollingLoop();
     };
 
-} // end namespace vxs_sensor
+} // end namespace vxs_ros
 
 #endif

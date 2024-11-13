@@ -50,4 +50,13 @@ install(TARGETS
   vxs_node
   DESTINATION lib/${PROJECT_NAME})
 
+set(CONFIG_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/config")
+
+# Install the config files. TODO: We should have them installed and available by the SDK!
+install(DIRECTORY "${CONFIG_SRC_DIR}"
+  DESTINATION "/home/vxs/ros_ws/install"
+  FILES_MATCHING PATTERN "*.json"
+  # Add more patterns as needed
+)
+
 ament_package()
