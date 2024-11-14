@@ -76,6 +76,8 @@ namespace vxs_ros
 
     VxsSensorPublisher::~VxsSensorPublisher()
     {
+        flag_shutdown_request_ = true;
+        cvar_sensor_poll_.notify_all();
         if (frame_polling_thread_)
         {
             if (frame_polling_thread_->joinable())
@@ -83,6 +85,7 @@ namespace vxs_ros
                 frame_polling_thread_->join();
             }
         }
+        frame_polling_thread_ = nullptr;
     }
 
     void VxsSensorPublisher::TimerCB()
@@ -117,15 +120,26 @@ namespace vxs_ros
         }
     }
 
+    /*
     void VxsSensorPublisher::FramePollingLoop()
     {
         flag_in_polling_loop_ = true;
+        int counter = 0;
         while (!flag_shutdown_request_)
         {
             // @TODO: Poll sensor and and hold back...
 
             std::unique_lock<std::mutex> sensor_lock(sensor_mutex_);
-            // Block the thread if no data is available from the sensor
+            //  Block the thread if no data is available from the sensor
+            bool data_ready = false;
+
+            // while (!(data_ready = vxsdk::vxCheckForData()))
+            //{
+            // }
+            counter++;
+            RCLCPP_INFO_STREAM(this->get_logger(), "Data ready: " << (data_ready ? "YES" : "NO"));
+            RCLCPP_INFO_STREAM(this->get_logger(), "Counter: " << counter);
+
             cvar_sensor_poll_.wait(
                 sensor_lock,
                 [this]()
@@ -138,13 +152,70 @@ namespace vxs_ros
 
             // Get data from the sensor
             float *frameXYZ = vxsdk::vxGetFrameXYZ();
-
+            RCLCPP_INFO_STREAM(this->get_logger(), "Received frame!");
             // Unlock the queue now/ for subsequent processing
             sensor_lock.unlock();
 
             // @TODO: Maybe add data to queue or simply publish here...
         }
         flag_in_polling_loop_ = false;
+    }
+    */
+    void VxsSensorPublisher::FramePollingLoop()
+    {
+        flag_in_polling_loop_ = true;
+        int counter = 0;
+        while (!flag_shutdown_request_)
+        {
+            // @TODO: Poll sensor and and hold back...
+
+            //  Wait until data ready
+            while (!vxsdk::vxCheckForData())
+            {
+            }
+
+            // Get data from the sensor
+            float *frameXYZ = vxsdk::vxGetFrameXYZ();
+            counter++;
+
+            RCLCPP_INFO_STREAM(this->get_logger(), "Received frame!");
+
+            // @TODO: Maybe add data to queue or simply publish here...
+        }
+        flag_in_polling_loop_ = false;
+    }
+
+    cv::Mat VxsSensorPublisher::UnpackSensorData(float *frameXYZ)
+    {
+        // Use cam #1 intrinsics for the depth image sensor
+        const float &fx = cam1_.fx;
+        const float &fy = cam1_.fy;
+        const float &cx = cam1_.cx;
+        const float &cy = cam1_.cy;
+
+        cv::Mat depth(SENSOR_HEIGHT, SENSOR_WIDTH, CV_16U);
+        depth *= 0;
+        for (size_t r = 0; r < SENSOR_HEIGHT; r++)
+        {
+            for (size_t c = 0; c < SENSOR_WIDTH; c++)
+            {
+                if ((float &Z = frameXYZ[(r * SENSOR_WIDTH + c) * 3 + 2]) > 1e-5)
+                {
+                    const float &X = frameXYZ[(r * SENSOR_WIDTH + c) * 3];
+                    const float &Y = frameXYZ[(r * SENSOR_WIDTH + c) * 3 + 1];
+                    const int x = std::lround(X / Z * fx + cx);
+                    const int y = std::lround(Y / Z * fy + cy);
+                    //  Check for negatives and out-of-bounds
+                    if (y < 0 || y > SENSOR_HEIGHT - 1 || //
+                        x < 0 || x > SENSOR_WIDTH - 1)
+                    {
+                        // @TODO: Get a 16-bit approximation and save at x, y location
+                        continue;
+                    }
+                }
+            }
+        }
+        return depth;
     }
 
 } // end namespace vxs_ros

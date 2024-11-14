@@ -15,6 +15,8 @@
 #include <thread>
 #include <string>
 
+#include <opencv2/core.hpp>
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -25,10 +27,22 @@ using namespace std::chrono_literals;
 
 namespace vxs_ros
 {
+    struct CameraCalibration
+    {
+        float fx, fy, cx, cy;
+        cv::Vec<float, 5> dist = {0, 0, 0, 0, 0};
+        cv::Vec3f t = {0, 0, 0, 0};
+        cv::Matx<float, 3, 3> R = cv::Matx<float, 3, 3>::eye();
+    };
+
     class VxsSensorPublisher : public rclcpp::Node
     {
 
     public:
+        //! Sensor dimensions here. @TODO: Should be able to get that from the SDK?
+        static const int SENSOR_WIDTH = 300;
+        static const int SENSOR_HEIGHT = 300;
+
         VxsSensorPublisher();
         ~VxsSensorPublisher();
 
@@ -61,10 +75,16 @@ namespace vxs_ros
         //! Flag indicating execution is inside the polling loop.
         bool flag_in_polling_loop_;
 
+        //! Camera #1 calibration
+        CameraCalibration cam1_;
+        //! Camera #2 calibration
+        CameraCalibration cam2_;
+
         bool InitSensor();
         void TimerCB();
         void FramePublisherLoop();
         void FramePollingLoop();
+        cv::Mat UnpackSensorData(float *frameXYZ);
     };
 
 } // end namespace vxs_ros

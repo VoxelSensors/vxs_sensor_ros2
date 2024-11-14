@@ -25,7 +25,16 @@ list(APPEND AMENT_LIBS std_msgs)
 
 list(APPEND VXS_NODE_INCLUDE_DIRS src)
 
-#Find VXS SDK
+# Find OpenCV
+find_package(OpenCV REQUIRED)
+if (OpenCV_FOUND)
+  list(APPEND NODE_INCLUDE_DIRS
+       ${OpenCV_INCLUDE_DIRS})
+  list(APPEND OTHER_LIBS
+       ${OpenCV_LIBS})
+endif()
+
+#Find VXSSDK
 message( "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
 set(CMAKE_MODULE_PATH "${SMAKE_MODULE_PATH};/usr/share/cmake/Modules")
 find_package(VXSDK REQUIRED)
@@ -35,6 +44,8 @@ if (VXSDK_FOUND)
 else()
   message("VXSDK not found!")
 endif()
+
+
 
 include_directories(${VXS_NODE_INCLUDE_DIRS})
 set(VXS_NODE_SOURCES 
