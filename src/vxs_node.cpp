@@ -7,7 +7,6 @@ namespace vxs_ros
 {
     VxsSensorPublisher::VxsSensorPublisher() :                                 //
                                                Node("vxs_sensor"),             //
-                                               num_cams_(0),                   //
                                                frame_polling_thread_(nullptr), //
                                                flag_shutdown_request_(false)
     {
@@ -55,6 +54,9 @@ namespace vxs_ros
             RCLCPP_INFO_STREAM(this->get_logger(), "Calibration JSON is " << calib_json_);
         }
 
+        // Load calibration into members
+        LoadCalibrationFromJson(calib_json_);
+
         // Initialize Sensor
         if (!InitSensor())
         {
@@ -62,8 +64,13 @@ namespace vxs_ros
             rclcpp::shutdown();
         }
 
+        // Create depth image puiblisher
+        depth_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("depth_image", 10);
+
         // Initialize & start polling thread
+        RCLCPP_INFO_STREAM(this->get_logger(), "Starting publisher thread...");
         frame_polling_thread_ = std::make_shared<std::thread>(std::bind(&VxsSensorPublisher::FramePollingLoop, this));
+        RCLCPP_INFO_STREAM(this->get_logger(), "Done!");
 
         publisher_ = this->create_publisher<std_msgs::msg::String>("vxs_data", 10);
         timer_ = this->create_wall_timer(     //
@@ -112,75 +119,25 @@ namespace vxs_ros
         return cam_num > 0;
     }
 
-    void VxsSensorPublisher::FramePublisherLoop()
-    {
-        while (!flag_shutdown_request_)
-        {
-            // @TODO: Publish depth images and sensor params here...
-        }
-    }
-
-    /*
     void VxsSensorPublisher::FramePollingLoop()
     {
         flag_in_polling_loop_ = true;
         int counter = 0;
         while (!flag_shutdown_request_)
         {
-            // @TODO: Poll sensor and and hold back...
-
-            std::unique_lock<std::mutex> sensor_lock(sensor_mutex_);
-            //  Block the thread if no data is available from the sensor
-            bool data_ready = false;
-
-            // while (!(data_ready = vxsdk::vxCheckForData()))
-            //{
-            // }
-            counter++;
-            RCLCPP_INFO_STREAM(this->get_logger(), "Data ready: " << (data_ready ? "YES" : "NO"));
-            RCLCPP_INFO_STREAM(this->get_logger(), "Counter: " << counter);
-
-            cvar_sensor_poll_.wait(
-                sensor_lock,
-                [this]()
-                { return vxsdk::vxCheckForData() || flag_shutdown_request_; });
-            if (flag_shutdown_request_)
-            {
-                sensor_lock.unlock();
-                continue;
-            }
-
-            // Get data from the sensor
-            float *frameXYZ = vxsdk::vxGetFrameXYZ();
-            RCLCPP_INFO_STREAM(this->get_logger(), "Received frame!");
-            // Unlock the queue now/ for subsequent processing
-            sensor_lock.unlock();
-
-            // @TODO: Maybe add data to queue or simply publish here...
-        }
-        flag_in_polling_loop_ = false;
-    }
-    */
-    void VxsSensorPublisher::FramePollingLoop()
-    {
-        flag_in_polling_loop_ = true;
-        int counter = 0;
-        while (!flag_shutdown_request_)
-        {
-            // @TODO: Poll sensor and and hold back...
-
-            //  Wait until data ready
+            // Wait until data ready
             while (!vxsdk::vxCheckForData())
             {
             }
-
             // Get data from the sensor
             float *frameXYZ = vxsdk::vxGetFrameXYZ();
             counter++;
-
-            RCLCPP_INFO_STREAM(this->get_logger(), "Received frame!");
-
-            // @TODO: Maybe add data to queue or simply publish here...
+            // Extract frame
+            // RCLCPP_INFO_STREAM(this->get_logger(), "Unpacking frame...");
+            cv::Mat frame = UnpackSensorData(frameXYZ);
+            // RCLCPP_INFO_STREAM(this->get_logger(), "DONE");
+            //  Publish sensor data as a depth image
+            PublishDepthImage(frame);
         }
         flag_in_polling_loop_ = false;
     }
@@ -188,18 +145,18 @@ namespace vxs_ros
     cv::Mat VxsSensorPublisher::UnpackSensorData(float *frameXYZ)
     {
         // Use cam #1 intrinsics for the depth image sensor
-        const float &fx = cam1_.fx;
-        const float &fy = cam1_.fy;
-        const float &cx = cam1_.cx;
-        const float &cy = cam1_.cy;
-
+        const float &fx = cams_[0].K(0, 0);
+        const float &fy = cams_[0].K(1, 1);
+        const float &cx = cams_[0].K(0, 2);
+        const float &cy = cams_[0].K(1, 2);
         cv::Mat depth(SENSOR_HEIGHT, SENSOR_WIDTH, CV_16U);
-        depth *= 0;
+        depth = 0;
         for (size_t r = 0; r < SENSOR_HEIGHT; r++)
         {
             for (size_t c = 0; c < SENSOR_WIDTH; c++)
             {
-                if ((float &Z = frameXYZ[(r * SENSOR_WIDTH + c) * 3 + 2]) > 1e-5)
+                const float &Z = frameXYZ[(r * SENSOR_WIDTH + c) * 3 + 2];
+                if (Z > 1e-5)
                 {
                     const float &X = frameXYZ[(r * SENSOR_WIDTH + c) * 3];
                     const float &Y = frameXYZ[(r * SENSOR_WIDTH + c) * 3 + 1];
@@ -209,13 +166,62 @@ namespace vxs_ros
                     if (y < 0 || y > SENSOR_HEIGHT - 1 || //
                         x < 0 || x > SENSOR_WIDTH - 1)
                     {
-                        // @TODO: Get a 16-bit approximation and save at x, y location
                         continue;
                     }
+
+                    // Get a 16-bit approximation and save at x, y location
+                    uint16_t iZ = std::lround(Z);
+                    depth.at<uint16_t>(y, x) = iZ;
                 }
             }
         }
         return depth;
+    }
+
+    void VxsSensorPublisher::LoadCalibrationFromJson(const std::string &calib_json)
+    {
+        // @TODO: Read the config to acquire number of cameras! Assuming stereo for now....
+        cams_.resize(2);
+        cv::FileStorage fs(calib_json, 0);
+        cv::FileNode root = fs["Cameras"];
+        cv::FileNode cam1 = root[0];
+        cams_[0].t = cv::Vec3f({cam1["Translation"][0], cam1["Translation"][1], cam1["Translation"][2]});           //
+        cams_[0].R = cv::Matx<float, 3, 3>({cam1["Rotation"][0][0], cam1["Rotation"][0][1], cam1["Rotation"][0][2], //
+                                            cam1["Rotation"][1][0], cam1["Rotation"][1][1], cam1["Rotation"][1][2], //
+                                            cam1["Rotation"][2][0], cam1["Rotation"][2][1], cam1["Rotation"][2][2]});
+        cams_[0].dist = cv::Vec<float, 5>({cam1["Distortion"][0], cam1["Distortion"][1], cam1["Distortion"][2], cam1["Distortion"][3], cam1["Distortion"][4]});
+        cams_[0].K = cv::Matx<float, 3, 3>({cam1["Intrinsic"][0][0], cam1["Intrinsic"][0][1], cam1["Intrinsic"][0][2], //
+                                            cam1["Intrinsic"][1][0], cam1["Intrinsic"][1][1], cam1["Intrinsic"][1][2], //
+                                            cam1["Intrinsic"][2][0], cam1["Intrinsic"][2][1], cam1["Intrinsic"][2][2]});
+        cams_[0].image_size = cv::Size_<int>(cam1["SensorSize"]["Width"], cam1["SensorSize"]["Height"]);
+
+        cv::FileNode cam2 = root[1];
+        cams_[1].t = cv::Vec3f({cam2["Translation"][0], cam2["Translation"][1], cam2["Translation"][2]});           //
+        cams_[1].R = cv::Matx<float, 3, 3>({cam2["Rotation"][0][0], cam2["Rotation"][0][1], cam2["Rotation"][0][2], //
+                                            cam2["Rotation"][1][0], cam2["Rotation"][1][1], cam2["Rotation"][1][2], //
+                                            cam2["Rotation"][2][0], cam2["Rotation"][2][1], cam2["Rotation"][2][2]});
+        cams_[1].dist = cv::Vec<float, 5>({cam2["Distortion"][0], cam2["Distortion"][1], cam2["Distortion"][2], cam2["Distortion"][3], cam1["Distortion"][4]});
+        cams_[1].K = cv::Matx<float, 3, 3>({cam2["Intrinsic"][0][0], cam2["Intrinsic"][0][1], cam2["Intrinsic"][0][2], //
+                                            cam2["Intrinsic"][1][0], cam2["Intrinsic"][1][1], cam2["Intrinsic"][1][2], //
+                                            cam2["Intrinsic"][2][0], cam2["Intrinsic"][2][1], cam2["Intrinsic"][2][2]});
+        cams_[1].image_size = cv::Size_<int>(cam2["SensorSize"]["Width"], cam2["SensorSize"]["Height"]);
+
+        RCLCPP_INFO_STREAM(this->get_logger(), "cam1 K: " << cams_[0].K);
+    }
+
+    void VxsSensorPublisher::PublishDepthImage(const cv::Mat &depth_image)
+    {
+        // cv_bridge::CvImagePtr cv_ptr;
+        //  NOTE: See http://docs.ros.org/en/lunar/api/cv_bridge/html/c++/cv__bridge_8cpp_source.html
+        //        for image encoding constants in cv_bridge
+        sensor_msgs::msg::Image::SharedPtr msg =
+            cv_bridge::CvImage(                       //
+                std_msgs::msg::Header(),              //
+                sensor_msgs::image_encodings::MONO16, //
+                depth_image)
+                .toImageMsg();
+        RCLCPP_INFO_STREAM(this->get_logger(), "Publishing image...");
+        depth_publisher_->publish(*msg.get());
     }
 
 } // end namespace vxs_ros

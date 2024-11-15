@@ -20,6 +20,13 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "sensor_msgs/msg/image.hpp"
+#include "sensor_msgs/msg/camera_info.hpp"
+
+#include <cv_bridge/cv_bridge.h>
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <opencv2/opencv.hpp>
 
 #include <SDK2.h>
 
@@ -29,10 +36,11 @@ namespace vxs_ros
 {
     struct CameraCalibration
     {
-        float fx, fy, cx, cy;
         cv::Vec<float, 5> dist = {0, 0, 0, 0, 0};
-        cv::Vec3f t = {0, 0, 0, 0};
+        cv::Vec3f t = {0, 0, 0};
         cv::Matx<float, 3, 3> R = cv::Matx<float, 3, 3>::eye();
+        cv::Matx<float, 3, 3> K = cv::Matx<float, 3, 3>::eye();
+        cv::Size_<int> image_size = cv::Size_<int>(0, 0);
     };
 
     class VxsSensorPublisher : public rclcpp::Node
@@ -54,15 +62,13 @@ namespace vxs_ros
 
         rclcpp::TimerBase::SharedPtr timer_;
         rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
+        rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_publisher_;
         //! FPS
         int fps_;
         //! config json
         std::string config_json_;
         //! calibration json
         std::string calib_json_;
-
-        //! Return number of cameras by initialization
-        int num_cams_;
 
         //! Sensor mutex
         std::mutex sensor_mutex_;
@@ -76,15 +82,16 @@ namespace vxs_ros
         bool flag_in_polling_loop_;
 
         //! Camera #1 calibration
-        CameraCalibration cam1_;
-        //! Camera #2 calibration
-        CameraCalibration cam2_;
+        std::vector<CameraCalibration> cams_;
 
         bool InitSensor();
         void TimerCB();
-        void FramePublisherLoop();
         void FramePollingLoop();
         cv::Mat UnpackSensorData(float *frameXYZ);
+        //! Load calilbration from json (required for the formation of the depth map)
+        void LoadCalibrationFromJson(const std::string &calib_json);
+        //! Publish image and calibration
+        void PublishDepthImage(const cv::Mat &depth_image);
     };
 
 } // end namespace vxs_ros

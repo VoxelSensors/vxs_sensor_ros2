@@ -22,6 +22,8 @@ find_package(image_transport REQUIRED)
 list(APPEND AMENT_LIBS image_transport)
 find_package(std_msgs REQUIRED)
 list(APPEND AMENT_LIBS std_msgs)
+find_package(sensor_msgs REQUIRED)
+list(APPEND AMENT_LIBS sensor_msgs)
 
 list(APPEND VXS_NODE_INCLUDE_DIRS src)
 
