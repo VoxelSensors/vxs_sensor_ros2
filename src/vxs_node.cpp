@@ -64,21 +64,13 @@ namespace vxs_ros
             rclcpp::shutdown();
         }
 
-        // Create depth image puiblisher
-        depth_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("depth_image", 10);
-
+        // Create publishers
+        depth_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10);
+        cam_info_publisher_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("depth/camera_info", 10);
         // Initialize & start polling thread
         RCLCPP_INFO_STREAM(this->get_logger(), "Starting publisher thread...");
         frame_polling_thread_ = std::make_shared<std::thread>(std::bind(&VxsSensorPublisher::FramePollingLoop, this));
         RCLCPP_INFO_STREAM(this->get_logger(), "Done!");
-
-        publisher_ = this->create_publisher<std_msgs::msg::String>("vxs_data", 10);
-        timer_ = this->create_wall_timer(     //
-            500ms,                            //
-            std::bind(                        //
-                &VxsSensorPublisher::TimerCB, //
-                this)                         //
-        );
     }
 
     VxsSensorPublisher::~VxsSensorPublisher()
@@ -93,14 +85,7 @@ namespace vxs_ros
             }
         }
         frame_polling_thread_ = nullptr;
-    }
-
-    void VxsSensorPublisher::TimerCB()
-    {
-        auto message = std_msgs::msg::String();
-        message.data = "Hello, world! "; // + std::to_string(count_++);
-        RCLCPP_INFO(this->get_logger(), "Publishing: '%s'", message.data.c_str());
-        publisher_->publish(message);
+        vxsdk::vxStopSystem();
     }
 
     bool VxsSensorPublisher::InitSensor()
@@ -205,8 +190,6 @@ namespace vxs_ros
                                             cam2["Intrinsic"][1][0], cam2["Intrinsic"][1][1], cam2["Intrinsic"][1][2], //
                                             cam2["Intrinsic"][2][0], cam2["Intrinsic"][2][1], cam2["Intrinsic"][2][2]});
         cams_[1].image_size = cv::Size_<int>(cam2["SensorSize"]["Width"], cam2["SensorSize"]["Height"]);
-
-        RCLCPP_INFO_STREAM(this->get_logger(), "cam1 K: " << cams_[0].K);
     }
 
     void VxsSensorPublisher::PublishDepthImage(const cv::Mat &depth_image)
@@ -214,14 +197,44 @@ namespace vxs_ros
         // cv_bridge::CvImagePtr cv_ptr;
         //  NOTE: See http://docs.ros.org/en/lunar/api/cv_bridge/html/c++/cv__bridge_8cpp_source.html
         //        for image encoding constants in cv_bridge
-        sensor_msgs::msg::Image::SharedPtr msg =
+        auto depth_header = std_msgs::msg::Header();
+        depth_header.stamp = this->get_clock()->now();
+        sensor_msgs::msg::Image::SharedPtr depth_image_msg =
             cv_bridge::CvImage(                       //
-                std_msgs::msg::Header(),              //
+                depth_header,                         //
                 sensor_msgs::image_encodings::MONO16, //
                 depth_image)
                 .toImageMsg();
-        RCLCPP_INFO_STREAM(this->get_logger(), "Publishing image...");
-        depth_publisher_->publish(*msg.get());
+
+        // Create camera info message
+        sensor_msgs::msg::CameraInfo::SharedPtr cam_info_msg = std::make_shared<sensor_msgs::msg::CameraInfo>();
+
+        cam_info_msg->header.stamp = depth_image_msg->header.stamp;
+        cam_info_msg->header = std_msgs::msg::Header();
+        cam_info_msg->header.stamp = depth_image_msg->header.stamp;
+
+        cam_info_msg->header.frame_id = "depth_camera";
+        cam_info_msg->width = depth_image.cols;
+        cam_info_msg->height = depth_image.rows;
+        cam_info_msg->distortion_model = "plumn_bob";
+
+        cam_info_msg->d = {cams_[0].dist[0], cams_[0].dist[1], cams_[0].dist[2], cams_[0].dist[3], cams_[0].dist[4]};
+        cam_info_msg->k = {                                                      //
+                           cams_[0].K(0, 0), cams_[0].K(0, 1), cams_[0].K(0, 2), //
+                           cams_[0].K(1, 0), cams_[0].K(1, 1), cams_[0].K(1, 2), //
+                           cams_[0].K(2, 0), cams_[0].K(2, 1), cams_[0].K(2, 2)};
+        cam_info_msg->r = {                                                      //
+                           cams_[0].R(0, 0), cams_[0].R(0, 1), cams_[0].R(0, 2), //
+                           cams_[0].R(1, 0), cams_[0].R(1, 1), cams_[0].R(1, 2), //
+                           cams_[0].R(2, 0), cams_[0].R(2, 1), cams_[0].R(2, 2)};
+
+        cam_info_msg->p = {                                                         //
+                           cams_[0].K(0, 0), cams_[0].K(0, 1), cams_[0].K(0, 2), 0, //
+                           cams_[0].K(1, 0), cams_[0].K(1, 1), cams_[0].K(1, 2), 0, //
+                           cams_[0].K(2, 0), cams_[0].K(2, 1), cams_[0].K(2, 2)};
+        // publish depth image and camera info
+        depth_publisher_->publish(*depth_image_msg.get());
+        cam_info_publisher_->publish(*cam_info_msg.get());
     }
 
 } // end namespace vxs_ros

@@ -61,17 +61,16 @@ namespace vxs_ros
         std::shared_ptr<std::thread> frame_polling_thread_;
 
         rclcpp::TimerBase::SharedPtr timer_;
-        rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
+
         rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_publisher_;
+        rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_publisher_;
+
         //! FPS
         int fps_;
         //! config json
         std::string config_json_;
         //! calibration json
         std::string calib_json_;
-
-        //! Sensor mutex
-        std::mutex sensor_mutex_;
 
         //! Condition variable for the sensor polling thread
         std::condition_variable cvar_sensor_poll_;
@@ -84,9 +83,11 @@ namespace vxs_ros
         //! Camera #1 calibration
         std::vector<CameraCalibration> cams_;
 
+        //! Initializae sensor
         bool InitSensor();
-        void TimerCB();
+        //! The main loop of the frame ppolling thread
         void FramePollingLoop();
+        //! Unpack sensor data into a cv::Mat
         cv::Mat UnpackSensorData(float *frameXYZ);
         //! Load calilbration from json (required for the formation of the depth map)
         void LoadCalibrationFromJson(const std::string &calib_json);
