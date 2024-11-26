@@ -7,8 +7,8 @@
  *
  */
 
-#ifndef VX_SENSOR_HPP
-#define VX_SENSOR_HPP
+#ifndef VXS_SENSOR_HPP
+#define VXS_SENSOR_HPP
 
 #include <condition_variable>
 #include <memory>
@@ -22,7 +22,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
-
+#include "sensor_msgs/msg/point_cloud2.hpp"
 #include <cv_bridge/cv_bridge.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -64,6 +64,7 @@ namespace vxs_ros
 
         rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_publisher_;
         rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_publisher_;
+        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcloud_publisher_;
 
         //! FPS
         int fps_;
@@ -72,8 +73,11 @@ namespace vxs_ros
         //! calibration json
         std::string calib_json_;
 
-        //! Condition variable for the sensor polling thread
-        std::condition_variable cvar_sensor_poll_;
+        //! Publish depth image
+        bool publish_depth_image_;
+
+        //! Publish pointcloud
+        bool publish_pointcloud_;
 
         //! Shut down request flag
         bool flag_shutdown_request_;
@@ -87,12 +91,15 @@ namespace vxs_ros
         bool InitSensor();
         //! The main loop of the frame ppolling thread
         void FramePollingLoop();
-        //! Unpack sensor data into a cv::Mat
-        cv::Mat UnpackSensorData(float *frameXYZ);
+        //! Unpack sensor data into a cv::Mat and return 3D points
+        cv::Mat UnpackSensorData(float *frameXYZ, std::vector<cv::Vec3f> &points);
+
         //! Load calilbration from json (required for the formation of the depth map)
         void LoadCalibrationFromJson(const std::string &calib_json);
         //! Publish image and calibration
         void PublishDepthImage(const cv::Mat &depth_image);
+        //! Publish a pointcloud
+        void PublishPointcloud(const std::vector<cv::Vec3f> &points);
     };
 
 } // end namespace vxs_ros
