@@ -1,7 +1,7 @@
 #include <chrono>
 #include <functional>
 
-#include <vxs_node.hpp>
+#include "publisher/vxs_node.hpp"
 
 namespace vxs_ros
 {
@@ -10,7 +10,7 @@ namespace vxs_ros
                                                frame_polling_thread_(nullptr), //
                                                flag_shutdown_request_(false)
     {
-        std::string package_share_directory = ament_index_cpp::get_package_share_directory("vxs_sensor");
+        std::string package_share_directory = ament_index_cpp::get_package_share_directory("vxs_sensor_ros2");
         RCLCPP_INFO_STREAM(this->get_logger(), "Package share directory: " << package_share_directory);
         // Declare & Get parameters
         this->declare_parameter("publish_depth_image", rclcpp::PARAMETER_BOOL);

@@ -13,17 +13,19 @@ endif()
 
 
 find_package(ament_cmake REQUIRED)
-list(APPEND AMENT_LIBS ament_cmake)
+list(APPEND AMENT_DEPENDENCIES ament_cmake)
+find_package(ament_cmake_python REQUIRED)
+list(APPEND AMENT_DEPENDENCIES ament_cmake_python)
 find_package(rclcpp REQUIRED)
-list(APPEND AMENT_LIBS rclcpp)
+list(APPEND AMENT_DEPENDENCIES rclcpp)
 find_package(cv_bridge REQUIRED)
-list(APPEND AMENT_LIBS cv_bridge)
+list(APPEND AMENT_DEPENDENCIES cv_bridge)
 find_package(image_transport REQUIRED)
-list(APPEND AMENT_LIBS image_transport)
+list(APPEND AMENT_DEPENDENCIES image_transport)
 find_package(std_msgs REQUIRED)
-list(APPEND AMENT_LIBS std_msgs)
+list(APPEND AMENT_DEPENDENCIES std_msgs)
 find_package(sensor_msgs REQUIRED)
-list(APPEND AMENT_LIBS sensor_msgs)
+list(APPEND AMENT_DEPENDENCIES sensor_msgs)
 
 list(APPEND VXS_NODE_INCLUDE_DIRS src)
 
@@ -37,7 +39,7 @@ if (OpenCV_FOUND)
 endif()
 
 #Find VXSSDK
-message( "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
+#message( "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
 set(CMAKE_MODULE_PATH "${SMAKE_MODULE_PATH};/usr/share/cmake/Modules")
 find_package(VXSDK REQUIRED)
 if (VXSDK_FOUND)
@@ -47,29 +49,37 @@ else()
   message("VXSDK not found!")
 endif()
 
-
+#PY --------------------------------------------------------------------
+#install python modules
+ament_python_install_package(${PROJECT_NAME})
 
 include_directories(${VXS_NODE_INCLUDE_DIRS})
 set(VXS_NODE_SOURCES 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vxs_node.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vxs_node.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vxs_node_main.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/publisher/vxs_node.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/publisher/vxs_node.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/publisher/vxs_node_main.cpp)
 
 add_executable(vxs_node ${VXS_NODE_SOURCES})
-ament_target_dependencies(vxs_node ${AMENT_LIBS})
+ament_target_dependencies(vxs_node ${AMENT_DEPENDENCIES})
 target_link_libraries(vxs_node ${OTHER_LIBS})
 
 install(TARGETS
   vxs_node
   DESTINATION lib/${PROJECT_NAME})
 
-set(CONFIG_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/config")
+#install python executables
+install(PROGRAMS
+  scripts/vxs_py_subscriber.py
+  DESTINATION lib/${PROJECT_NAME})
+
 
 # Install the config files. TODO: We should have them installed and available by the SDK!
+set(CONFIG_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/config")
 install(DIRECTORY "${CONFIG_SRC_DIR}"
   DESTINATION "/home/vxs/ros_ws/install"
   FILES_MATCHING PATTERN "*.json"
   # Add more patterns as needed
 )
 
+ament_export_dependencies(${AMENT_DEPENDENCIES})
 ament_package()
