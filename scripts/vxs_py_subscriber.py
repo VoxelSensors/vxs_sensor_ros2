@@ -32,7 +32,7 @@ class VxsSensorSubscriber(Node):
         camera_info_CB_group = MutuallyExclusiveCallbackGroup()
         self.calibration_sub = self.create_subscription(
             CameraInfo,
-            "/depth/camera_info",
+            "/sensor/camera_info",
             self.CameraInfoCB,
             qos_profile=1,
             callback_group=camera_info_CB_group,

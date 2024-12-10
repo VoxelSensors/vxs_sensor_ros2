@@ -63,6 +63,16 @@ add_executable(vxs_node ${VXS_NODE_SOURCES})
 ament_target_dependencies(vxs_node ${AMENT_DEPENDENCIES})
 target_link_libraries(vxs_node ${OTHER_LIBS})
 
+SET(VXS_CPP_SUB_SOURCES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/subscriber/vxs_subscriber.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/subscriber/vxs_subscriber.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/subscriber/vxs_subscriber_main.cpp)
+
+add_executable(vxs_cpp_subscriber ${VXS_CPP_SUB_SOURCES})
+ament_target_dependencies(vxs_cpp_subscriber ${AMENT_DEPENDENCIES})
+target_link_libraries(vxs_cpp_subscriber ${OTHER_LIBS})
+
+
 install(TARGETS
   vxs_node
   DESTINATION lib/${PROJECT_NAME})
