@@ -18,7 +18,7 @@ This should take about an hour, depending on the connection. When done, verify t
 
 ``docker image list``
 
-You should be able to see a container named `vxs` with a tag `amd`. To run the container, use the bash script `run.sh` provided [here]().
+You should be able to see a container named `vxs` with a tag `amd`. To run the container, use the bash script `run.sh` provided in the `docker` directory of this repository.
 
 ``./run.sh vxs:amd``
 
