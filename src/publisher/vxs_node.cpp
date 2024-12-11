@@ -2,6 +2,7 @@
 #include <functional>
 
 #include "publisher/vxs_node.hpp"
+#include "common.hpp"
 
 namespace vxs_ros
 {

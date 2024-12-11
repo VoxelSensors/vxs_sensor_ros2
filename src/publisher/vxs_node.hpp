@@ -15,8 +15,6 @@
 #include <thread>
 #include <string>
 
-#include <opencv2/core.hpp>
-
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -26,6 +24,8 @@
 #include <cv_bridge/cv_bridge.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
+
+#include <opencv2/core.hpp>
 #include <opencv2/opencv.hpp>
 
 #include <SDK2.h>
@@ -34,15 +34,7 @@ using namespace std::chrono_literals;
 
 namespace vxs_ros
 {
-    struct CameraCalibration
-    {
-        cv::Vec<float, 5> dist = {0, 0, 0, 0, 0};
-        cv::Vec3f t = {0, 0, 0};
-        cv::Matx<float, 3, 3> R = cv::Matx<float, 3, 3>::eye();
-        cv::Matx<float, 3, 3> K = cv::Matx<float, 3, 3>::eye();
-        cv::Size_<int> image_size = cv::Size_<int>(0, 0);
-    };
-
+    struct CameraCalibration;
     class VxsSensorPublisher : public rclcpp::Node
     {
 

@@ -54,10 +54,10 @@ namespace vxs_ros
         rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcloud_subscriber_;
 
         //! Camera #1 calibration
-        std::vector<CameraCalibration> cams_;
+        std::shared_ptr<CameraCalibration> cam_;
 
-        void CameraInfoCB(const sensor_msgs::msg::CameraInfo::SharedPtr camera_info_msg) const;
-        void DepthImageCB(const sensor_msgs::msg::Image::SharedPtr depth_img_msg) const;
+        void CameraInfoCB(const sensor_msgs::msg::CameraInfo::SharedPtr camera_info_msg);
+        void DepthImageCB(const sensor_msgs::msg::Image::SharedPtr depth_img_msg);
     };
 
 } // end namespace vxs_ros
