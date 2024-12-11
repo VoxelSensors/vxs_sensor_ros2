@@ -2,6 +2,28 @@
 
 A ROS2 package for publishing sensor data in various forms (depth imagbe, pointcloud, event stream, etc.).
 
+## Retrieval of docker container wuith ROS2 vbinaries and necessary depencies
+
+The best way to obtain an environment that meets all depdencies folr the `vxs_sensor_ros2` package to build and run, is to directly download the pre-built docker container of an ubuntu 22.04 system with **ROS2 Humble** installed.
+
+### Install docker.io
+First, install docker whether on [windows](https://docs.docker.com/desktop/setup/install/windows-install/) or [linux](https://docs.docker.com/engine/install/). In any case, it should be straightforward to do.
+
+### Download vxs docker image
+Now, you can download the **vxs docker image** with ros2 binaries, OpenCV, VXSDK, and other depedencies by executing on the command line,
+
+``docker pull terzakig/vxs:amd``
+
+This should take about an hour, depending on the connection. When done, verify that the docker container is there by executing,
+
+``docker image list``
+
+You should be able to see a container named `vxs` with a tag `amd`. To run the container, use the bash script `run.sh` provided [here]().
+
+``./run.sh vxs:amd``
+
+Note that the script assumes that you have created directories `~/vxs_ws/ros_ws`  and `~/sandbox` in the host (i.e., your machine) which will become shared between the container and the host. If these directories don't exist, the container will run anyway and it will create them on the host side as well. Not sure about this behavior in windows, as the paths are not structured the same way, but I am assuming the same will happen, just in an arbitrarry path related to the docker executable.
+
 ## ROS2 Workspace setup \& Build
 
 ### Setting up the workspace directories
