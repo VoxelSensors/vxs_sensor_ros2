@@ -26,6 +26,8 @@ find_package(std_msgs REQUIRED)
 list(APPEND AMENT_DEPENDENCIES std_msgs)
 find_package(sensor_msgs REQUIRED)
 list(APPEND AMENT_DEPENDENCIES sensor_msgs)
+find_package(pcl_conversions REQUIRED)
+list(APPEND AMENT_DEPENDENCIES pcl_conversions)
 
 list(APPEND VXS_NODE_INCLUDE_DIRS src)
 

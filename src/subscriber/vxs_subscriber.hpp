@@ -58,6 +58,7 @@ namespace vxs_ros
 
         void CameraInfoCB(const sensor_msgs::msg::CameraInfo::SharedPtr camera_info_msg);
         void DepthImageCB(const sensor_msgs::msg::Image::SharedPtr depth_img_msg);
+        void PointcloudCB(const sensor_msgs::msg::PointCloud2::SharedPtr depth_img_msg);
     };
 
 } // end namespace vxs_ros

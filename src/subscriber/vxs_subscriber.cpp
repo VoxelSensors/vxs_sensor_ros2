@@ -3,6 +3,8 @@
 
 #include "common.hpp"
 #include "subscriber/vxs_subscriber.hpp"
+
+#include <pcl_conversions/pcl_conversions.h> // For converting between ROS and PCL types
 namespace vxs_ros
 {
     VxsSensorSubscriber::VxsSensorSubscriber() : Node("vxs_cpp_subscriber"), cam_(nullptr)
@@ -16,6 +18,12 @@ namespace vxs_ros
             "/depth/image",                                                            //
             5,                                                                         //
             std::bind(&VxsSensorSubscriber::DepthImageCB, this, std::placeholders::_1) //
+        );
+
+        pcloud_subscriber_ = this->create_subscription<sensor_msgs::msg::PointCloud2>( //
+            "/pcloud/cloud",                                                           //
+            5,                                                                         //
+            std::bind(&VxsSensorSubscriber::PointcloudCB, this, std::placeholders::_1) //
         );
     }
 
@@ -57,8 +65,38 @@ namespace vxs_ros
         }
         catch (const cv_bridge::Exception &e)
         {
-            auto logger = rclcpp::get_logger("my_subscriber");
-            RCLCPP_ERROR(logger, "Could not convert from '%s' to 'mono16'.", depth_img_msg->encoding.c_str());
+            // auto logger = rclcpp::get_logger("my_subscriber");
+            RCLCPP_ERROR(this->get_logger(), "Could not convert from '%s' to 'mono16'.", depth_img_msg->encoding.c_str());
+        }
+    }
+
+    void VxsSensorSubscriber::PointcloudCB(const sensor_msgs::msg::PointCloud2::SharedPtr pcl_msg)
+    {
+        std::vector<cv::Vec3f> points;
+        const uint32_t row_step = pcl_msg->row_step;
+
+        const uint32_t width = pcl_msg->width;
+        const uint32_t height = pcl_msg->height;
+        const size_t N = width * height; // Number of points in the
+        uint8_t *row_ptr = &pcl_msg->data[0];
+        RCLCPP_INFO_STREAM(this->get_logger(), "Fields: " << pcl_msg->fields.size());
+
+        for (size_t i = 0; i < N; i++)
+        {
+            float x = *reinterpret_cast<const float *>(row_ptr);
+            float y = *reinterpret_cast<const float *>(row_ptr + 4);
+            float z = *reinterpret_cast<const float *>(row_ptr + 8);
+
+            if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
+            {
+                points.emplace_back(x, y, z);
+                RCLCPP_INFO_STREAM(this->get_logger(), "Point: (" << x << ", " << y << ", " << z << ")");
+            }
+            else
+            {
+                RCLCPP_ERROR(this->get_logger(), "Invalid point read!");
+            }
+            row_ptr += row_step;
         }
     }
 
