@@ -2,12 +2,40 @@
 
 A ROS2 package for publishing sensor data in various forms (depth imagbe, pointcloud, event stream, etc.).
 
-## Retrieval of docker container wuith ROS2 vbinaries and necessary depencies
+## Retrieval of docker container with ROS2 binaries and necessary depencies
 
 The best way to obtain an environment that meets all depdencies folr the `vxs_sensor_ros2` package to build and run, is to directly download the pre-built docker container of an ubuntu 22.04 system with **ROS2 Humble** installed.
 
 ### Install docker.io
 First, install docker whether on [windows](https://docs.docker.com/desktop/setup/install/windows-install/) or [linux](https://docs.docker.com/engine/install/). In any case, it should be straightforward to do.
+
+#### Pos-installation steps in the docker setup (Linux)
+Create a docker user,
+
+``sudo groupadd docker``
+
+and add it to to sudoers:
+
+``sudo usermod -aG docker $USER``
+
+Restart the docker daemon for the changes to take effect:
+
+``sudo systemctl restart docker``
+
+Finally install the nvidia container toolkit (see [here](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) ). Configure repository first:
+
+``curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list``
+
+Then, update:
+
+``sudo apt update``
+
+Finally, install the container toolkit:
+
+``sudo apt-get install -y nvidia-container-toolkit``
 
 ### Download vxs docker image
 Now, you can download the **vxs docker image** with ros2 binaries, OpenCV, VXSDK, and other depedencies by executing on the command line,
