@@ -3,8 +3,7 @@
 # Defaults
 OFFLINE=false
 DOCKER_IMAGE=""
-CATKIN_WORKSPACE="/home/$USER/catkin_ws"
-MASTER_URI="http://localhost:11311/"
+ROS2_WORKSPACE="/home/$USER/vxs_ws/ros_ws"
 
 function DisplayHelp() {
   echo "Usage:"
@@ -29,8 +28,8 @@ elif [ "$DOCKER_IMAGE" = "" ]; then
 fi
 
 # Check the local workspace exists, else we get weird behaviour.
-if [ ! -d "$CATKIN_WORKSPACE" ]; then
-  echo "Catkin workspace '$CATKIN_WORKSPACE' does not exist."
+if [ ! -d "$ROS2_WORKSPACE" ]; then
+  echo "Catkin workspace '$ROS2_WORKSPACE' does not exist."
 fi
 
 # Shift to the next argument (TODO: extra drive mappings)
