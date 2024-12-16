@@ -73,30 +73,42 @@ namespace vxs_ros
     void VxsSensorSubscriber::PointcloudCB(const sensor_msgs::msg::PointCloud2::SharedPtr pcl_msg)
     {
         std::vector<cv::Vec3f> points;
-        const uint32_t row_step = pcl_msg->row_step;
+        // const uint32_t row_step = pcl_msg->row_step;
 
         const uint32_t width = pcl_msg->width;
         const uint32_t height = pcl_msg->height;
-        const size_t N = width * height; // Number of points in the
-        uint8_t *row_ptr = &pcl_msg->data[0];
-        RCLCPP_INFO_STREAM(this->get_logger(), "Fields: " << pcl_msg->fields.size());
+        uint8_t *data_ptr = &pcl_msg->data[0];
 
-        for (size_t i = 0; i < N; i++)
+        sensor_msgs::msg::PointField x_field = pcl_msg->fields[0];
+        sensor_msgs::msg::PointField y_field = pcl_msg->fields[1];
+        sensor_msgs::msg::PointField z_field = pcl_msg->fields[2];
+        // Point field datatypes. Pointrcloud can be either FLOAT32 or FLOAT64
+        // uint8 FLOAT32 = 7
+        // uint8 FLOAT64 = 8
+        const uint32_t field1_size = (x_field.datatype == 7 ? sizeof(float) : sizeof(double));
+        const uint32_t field2_size = (y_field.datatype == 7 ? sizeof(float) : sizeof(double));
+        const uint32_t field3_size = (z_field.datatype == 7 ? sizeof(float) : sizeof(double));
+        const uint32_t size_of_fields = field1_size + field2_size + field3_size;
+
+        for (size_t r = 0; r < height; r++)
         {
-            float x = *reinterpret_cast<const float *>(row_ptr);
-            float y = *reinterpret_cast<const float *>(row_ptr + 4);
-            float z = *reinterpret_cast<const float *>(row_ptr + 8);
+            for (size_t c = 0; c < width; c++)
+            {
+                const double x = x_field.datatype == 7 ? *(float *)(data_ptr + x_field.offset) : *(double *)(data_ptr + x_field.offset);
+                const double y = y_field.datatype == 7 ? *(float *)(data_ptr + y_field.offset) : *(double *)(data_ptr + y_field.offset);
+                const double z = z_field.datatype == 7 ? *(float *)(data_ptr + z_field.offset) : *(double *)(data_ptr + z_field.offset);
 
-            if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
-            {
-                points.emplace_back(x, y, z);
-                RCLCPP_INFO_STREAM(this->get_logger(), "Point: (" << x << ", " << y << ", " << z << ")");
+                if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
+                {
+                    points.emplace_back(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+                    RCLCPP_INFO_STREAM(this->get_logger(), "Point: (" << x << ", " << y << ", " << z << ")");
+                }
+                else
+                {
+                    RCLCPP_ERROR(this->get_logger(), "Invalid point read!");
+                }
+                data_ptr += size_of_fields;
             }
-            else
-            {
-                RCLCPP_ERROR(this->get_logger(), "Invalid point read!");
-            }
-            row_ptr += row_step;
         }
     }
 
