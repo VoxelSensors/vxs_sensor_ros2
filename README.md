@@ -2,7 +2,7 @@
 
 A ROS2 package for publishing sensor data in various forms (depth imagbe, pointcloud, event stream, etc.).
 
-## Retrieval of docker container with ROS2 binaries and necessary depencies
+## Optional retrieval of docker container with ROS2 binaries and necessary depencies
 
 The best way to obtain an environment that meets all depdencies folr the `vxs_sensor_ros2` package to build and run, is to directly download the pre-built docker container of an ubuntu 22.04 system with **ROS2 Humble** installed.
 
@@ -40,15 +40,28 @@ Finally, install the container toolkit:
 ### Download vxs docker image
 Now, you can download the **vxs docker image** with ros2 binaries, OpenCV, VXSDK, and other depedencies by executing on the command line,
 
+
+for an AMD system with Nvidia hardware,
+
 ``docker pull terzakig/vxs:amd``
+
+for an AMD system **without** Nvidia hardware,
+
+``docker pull terzakig/vxs:amd_no_gpu``
 
 This should take about an hour, depending on the connection. When done, verify that the docker container is there by executing,
 
 ``docker image list``
 
-You should be able to see a container named `vxs` with a tag `amd`. To run the container, use the bash script `run.sh` provided in the `docker` directory of this repository.
+You should be able to see a container named `vxs` with a tag `amd`. To run the container, use the bash script `run.sh` (or run_no_gpu.sh` if using the `amd_no_gpu` image) provided in the `docker` directory of this repository. Use,
 
 ``./run.sh vxs:amd``
+
+for the `amd` (with nvidia) image, or,
+
+``./run_no_gpu.sh vxs:amd``
+
+for the `amd_no_gpu` image.
 
 Note that the script assumes that you have created directories `~/vxs_ws/ros_ws`  and `~/sandbox` in the host (i.e., your machine) which will become shared between the container and the host. If these directories don't exist, the container will run anyway and it will create them on the host side as well. Not sure about this behavior in windows, as the paths are not structured the same way, but I am assuming the same will happen, just in an arbitrarry path related to the docker executable.
 
