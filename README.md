@@ -69,7 +69,7 @@ Note that the script assumes that you have created directories `~/vxs_ws/ros_ws`
 
 ### Setting up the workspace directories
 
-First, create the appropriate workspace directories (if not there yet; if present, skip to the build section). In the home directory of the Ubuntu host (or someplace else if on Windows), 
+First, create the appropriate workspace directories (if not there yet; if present, skip to the next section). In the home directory of the Ubuntu host (or someplace else if on Windows), 
 
 ``cd ~``
 
@@ -89,7 +89,27 @@ Create the **ROS2 workspace** below:
 
 ### Download ROS2 packages that must be built from source, including the [vxs_sensor_ros2](https://github.com/VoxelSensors/vxs_ros_workspace_install) package
 
-To setup the workspace, execute the steps described in the README of the workspace setup repository, [here](https://github.com/VoxelSensors/vxs_ros_workspace_install).
+To populate the workspace, you will need to execute a **rosinstall** script. The script is located in the `rosinstall/` directory of this repository. Thus, first clone the current repository inside `src`:
+
+``cd src``
+
+and clone,
+
+``git clone git@github.com:VoxelSensors/vxs_sensor_ros2.git``
+
+Then, copy the rosinstall script from the `vxs_sensor_ros2` rpository into `src` as follows:
+
+``cp vxs_sensor_ros2/rosinstall/rosinstall ./.rosinstall``
+
+Now, execute the rosinstall 
+
+``rosinstall .``
+
+## Build the workspace
+
+Move back to the ros workspace directory, i.e., `/home/vxs/vxs_ws/ros_ws`:
+
+``cd ..``
 
 The `rosinstall` script should have installed all repositories correctly in the `ros_ws/src`. To build everything, execute the following inside `ros_ws`:
 
