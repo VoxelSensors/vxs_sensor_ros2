@@ -1,0 +1,40 @@
+# ROS2 packages to build from source
+# **** DO NOT **** install binaries for these packages
+#
+#
+# ROS2: gazebo_ros_pkgs 
+- git: {local-name: ros-from-source/gazebo_ros_pkgs, uri: 'https://github.com/ros-simulation/gazebo_ros_pkgs.git', version: ros2}
+
+# ROS2: image_common
+- git: {local-name: ros-from-source/image_common, uri: 'https://github.com/ros-perception/image_common.git', version: humble}
+
+# ROS2: image_pipeline
+- git: {local-name: ros-from-source/image_pipeline, uri: 'https://github.com/ros-perception/image_pipeline.git', version: humble}
+
+# ROS2: image_transport_plugins
+- git: {local-name: ros-from-source/image_transport_plugins, uri: 'https://github.com/ros-perception/image_transport_plugins', version: humble}
+
+# ROS2: interactive_markers
+- git: {local-name: ros-from-source/interactive_markers, uri: 'https://github.com/ros-visualization/interactive_markers.git', version: humble}
+
+# ROS2: laser_geometry 
+- git: {local-name: ros-from-source/laser_geometry, uri: 'https://github.com/ros-perception/laser_geometry.git', version: humble}
+
+# ROS2: navigation2 
+- git: {local-name: ros-from-source/navigation2, uri: 'https://github.com/ros-navigation/navigation2.git', version: humble}
+
+# ROS2: resource_retriever
+- git: {local-name: ros-from-source/resource_retriever, uri: 'https://github.com/ros/resource_retriever.git', version: humble}
+
+# ROS2: rviz
+- git: {local-name: ros-from-source/rviz, uri: 'https://github.com/ros2/rviz.git', version: humble}
+
+# ROS2: vision_opencv 
+- git: {local-name: ros-from-source/vision_opencv, uri: 'https://github.com/ros-perception/vision_opencv.git', version: humble}
+
+# B. Other packages
+# 
+# vxs_sensor package
+
+- git: {local-name: vxs_sensor_ros2, uri: 'git@github.com:VoxelSensors/vxs_sensor_ros2.git', version: master}
+
