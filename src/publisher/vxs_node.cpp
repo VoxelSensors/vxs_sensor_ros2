@@ -43,7 +43,7 @@ namespace vxs_ros
         }
         else
         {
-            publish_events_ = publish_pcloud_param.as_bool();
+            publish_events_ = publish_events_param.as_bool();
         }
         RCLCPP_INFO_STREAM(this->get_logger(), "Publishing point cloud: " << (publish_pointcloud_ ? "YES." : "NO."));
 
@@ -127,7 +127,7 @@ namespace vxs_ros
             this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10);
         }
 
-        eventcloud_publisher_ = publish_events_ ? this->create_publisher<sensor_msgs::Pointcloud2>("pcloud/events", 10) : nullptr;
+        evcloud_publisher_ = publish_events_ ? this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/events", 10) : nullptr;
 
         cam_info_publisher_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("sensor/camera_info", 10);
         // Initialize & start polling thread
@@ -153,6 +153,7 @@ namespace vxs_ros
     bool VxsSensorPublisher::InitSensor()
     {
         // Set the frame rate (or time window)
+        vxsdk::pipelineType pipeline_type;
         if (publish_events_)
         {
             pipeline_type = vxsdk::pipelineType::all; // Get everything out XYT-XYT pairs and XYZT
