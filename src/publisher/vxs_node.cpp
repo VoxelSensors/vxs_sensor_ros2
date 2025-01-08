@@ -16,6 +16,7 @@ namespace vxs_ros
         // Declare & Get parameters
         this->declare_parameter("publish_depth_image", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_pcloud", rclcpp::PARAMETER_BOOL);
+        this->declare_parameter("publish_events", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("fps", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("config_json", rclcpp::PARAMETER_STRING);
         this->declare_parameter("calib_json", rclcpp::PARAMETER_STRING);
@@ -34,7 +35,18 @@ namespace vxs_ros
         }
         RCLCPP_INFO_STREAM(this->get_logger(), "Publishing depth image " << (publish_depth_image_ ? "YES." : "NO."));
 
-        // Publish point cloud
+        // Publish events (XYZT)
+        rclcpp::Parameter publish_events_param;
+        if (!this->get_parameter("publish_events", publish_events_param))
+        {
+            publish_events_ = true;
+        }
+        else
+        {
+            publish_events_ = publish_pcloud_param.as_bool();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Publishing point cloud: " << (publish_pointcloud_ ? "YES." : "NO."));
+
         rclcpp::Parameter publish_pcloud_param;
         if (!this->get_parameter("publish_pointcloud", publish_pcloud_param))
         {
@@ -58,6 +70,7 @@ namespace vxs_ros
             fps_ = fps_param.as_int();
             RCLCPP_INFO_STREAM(this->get_logger(), "Fps set to " << fps_);
         }
+        period_ = std::lround(1000.0f / fps_); // period in ms (will be used in initialization if streaming events)
 
         // Config json file
         rclcpp::Parameter config_json_param;
@@ -102,8 +115,19 @@ namespace vxs_ros
         }
 
         // Create publishers
-        depth_publisher_ = publish_depth_image_ ? this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10) : nullptr;
-        pcloud_publisher_ = publish_pointcloud_ ? this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10) : nullptr;
+        depth_publisher_ = nullptr;
+        if (publish_depth_image_ && !publish_events_)
+        {
+            this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10);
+        }
+
+        pcloud_publisher_ = nullptr;
+        if (publish_pointcloud_ && !publish_events_)
+        {
+            this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10);
+        }
+
+        eventcloud_publisher_ = publish_events_ ? this->create_publisher<sensor_msgs::Pointcloud2>("pcloud/events", 10) : nullptr;
 
         cam_info_publisher_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("sensor/camera_info", 10);
         // Initialize & start polling thread
@@ -128,10 +152,17 @@ namespace vxs_ros
 
     bool VxsSensorPublisher::InitSensor()
     {
-        vxsdk::pipelineType pipeline_type = vxsdk::pipelineType::fbPointcloud;
-
-        // Set the frame rate
-        vxsdk::vxSetFPS(fps_);
+        // Set the frame rate (or time window)
+        if (publish_events_)
+        {
+            pipeline_type = vxsdk::pipelineType::all; // Get everything out XYT-XYT pairs and XYZT
+            vxsdk::vxSetStreamingDuration(period_);
+        }
+        else
+        {
+            pipeline_type = vxsdk::pipelineType::fbPointcloud;
+            vxsdk::vxSetFPS(fps_);
+        }
 
         // Start the SDK Engine.
         int cam_num = vxsdk::vxStartSystem( //
@@ -157,7 +188,7 @@ namespace vxs_ros
             counter++;
             // Extract frame
             std::vector<cv::Vec3f> points;
-            cv::Mat frame = UnpackSensorData(frameXYZ, points);
+            cv::Mat frame = UnpackFrameSensorData(frameXYZ, points);
             // RCLCPP_INFO_STREAM(this->get_logger(), "DONE");
             //  Publish sensor data as a depth image
             if (publish_depth_image_)
@@ -172,7 +203,7 @@ namespace vxs_ros
         flag_in_polling_loop_ = false;
     }
 
-    cv::Mat VxsSensorPublisher::UnpackSensorData(float *frameXYZ, std::vector<cv::Vec3f> &points)
+    cv::Mat VxsSensorPublisher::UnpackFrameSensorData(float *frameXYZ, std::vector<cv::Vec3f> &points)
     {
         // Use cam #1 intrinsics for the depth image sensor
         const float &fx = cams_[0].K(0, 0);
