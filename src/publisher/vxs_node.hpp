@@ -99,6 +99,8 @@ namespace vxs_ros
         void PublishDepthImage(const cv::Mat &depth_image);
         //! Publish a pointcloud
         void PublishPointcloud(const std::vector<cv::Vec3f> &points);
+        //! Pubish stamped pointcloud
+        void PublishStampedPointcloud(const int N, vxsdk::vxXYZT *eventsXYZT);
     };
 
 } // end namespace vxs_ros
