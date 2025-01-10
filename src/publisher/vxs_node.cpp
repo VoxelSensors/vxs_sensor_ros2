@@ -45,7 +45,7 @@ namespace vxs_ros
         {
             publish_events_ = publish_events_param.as_bool();
         }
-        RCLCPP_INFO_STREAM(this->get_logger(), "Publishing point cloud: " << (publish_pointcloud_ ? "YES." : "NO."));
+        RCLCPP_INFO_STREAM(this->get_logger(), "Publishing stamped point cloud: " << (publish_events_ ? "YES." : "NO."));
 
         rclcpp::Parameter publish_pcloud_param;
         if (!this->get_parameter("publish_pointcloud", publish_pcloud_param))
@@ -118,13 +118,13 @@ namespace vxs_ros
         depth_publisher_ = nullptr;
         if (publish_depth_image_ && !publish_events_)
         {
-            this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10);
+            depth_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10);
         }
 
         pcloud_publisher_ = nullptr;
         if (publish_pointcloud_ && !publish_events_)
         {
-            this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10);
+            pcloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10);
         }
 
         evcloud_publisher_ = publish_events_ ? this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/events", 10) : nullptr;
@@ -197,9 +197,9 @@ namespace vxs_ros
                 counter++;
                 // Extract frame
                 std::vector<cv::Vec3f> points;
+
                 cv::Mat frame = UnpackFrameSensorData(frameXYZ, points);
-                // RCLCPP_INFO_STREAM(this->get_logger(), "DONE");
-                //  Publish sensor data as a depth image
+                //   Publish sensor data as a depth image
                 if (publish_depth_image_)
                 {
                     PublishDepthImage(frame);
@@ -326,6 +326,7 @@ namespace vxs_ros
                            cams_[0].K(1, 0), cams_[0].K(1, 1), cams_[0].K(1, 2), 0, //
                            cams_[0].K(2, 0), cams_[0].K(2, 1), cams_[0].K(2, 2)};
         // publish depth image and camera info
+
         depth_publisher_->publish(*depth_image_msg.get());
         cam_info_publisher_->publish(*cam_info_msg.get());
     }
@@ -434,6 +435,7 @@ namespace vxs_ros
             point[1] = eventsXYZT[i].y; // Y coordinate
             point[2] = eventsXYZT[i].z; // Z coordinate
             *(double *)(ptr + t.offset) = *(double *)&(eventsXYZT[i].timestamp);
+            ptr += msg->point_step;
         }
         evcloud_publisher_->publish(*msg.get());
     }
