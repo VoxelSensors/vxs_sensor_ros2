@@ -57,9 +57,13 @@ namespace vxs_ros
         rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_publisher_;
         rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_publisher_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcloud_publisher_;
+        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr evcloud_publisher_;
 
         //! FPS
         int fps_;
+        //! Frame/streaming window in msec
+        uint32_t period_;
+
         //! config json
         std::string config_json_;
         //! calibration json
@@ -70,6 +74,9 @@ namespace vxs_ros
 
         //! Publish pointcloud
         bool publish_pointcloud_;
+
+        //! Publish events flag. This should override depth + simpple pointcloud publishers
+        bool publish_events_;
 
         //! Shut down request flag
         bool flag_shutdown_request_;
@@ -84,7 +91,7 @@ namespace vxs_ros
         //! The main loop of the frame ppolling thread
         void FramePollingLoop();
         //! Unpack sensor data into a cv::Mat and return 3D points
-        cv::Mat UnpackSensorData(float *frameXYZ, std::vector<cv::Vec3f> &points);
+        cv::Mat UnpackFrameSensorData(float *frameXYZ, std::vector<cv::Vec3f> &points);
 
         //! Load calilbration from json (required for the formation of the depth map)
         void LoadCalibrationFromJson(const std::string &calib_json);
@@ -92,6 +99,8 @@ namespace vxs_ros
         void PublishDepthImage(const cv::Mat &depth_image);
         //! Publish a pointcloud
         void PublishPointcloud(const std::vector<cv::Vec3f> &points);
+        //! Pubish stamped pointcloud
+        void PublishStampedPointcloud(const int N, vxsdk::vxXYZT *eventsXYZT);
     };
 
 } // end namespace vxs_ros

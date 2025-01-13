@@ -10,6 +10,8 @@
 #include <opencv2/core.hpp>
 #include <opencv2/opencv.hpp>
 
+#include <SDK2.h>
+
 namespace vxs_ros
 {
     struct CameraCalibration

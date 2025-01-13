@@ -25,6 +25,12 @@ namespace vxs_ros
             5,                                                                         //
             std::bind(&VxsSensorSubscriber::PointcloudCB, this, std::placeholders::_1) //
         );
+
+        evcloud_subscriber_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(       //
+            "/pcloud/events",                                                                 //
+            5,                                                                                //
+            std::bind(&VxsSensorSubscriber::StampedPointcloudCB, this, std::placeholders::_1) //
+        );
     }
 
     VxsSensorSubscriber::~VxsSensorSubscriber()
@@ -102,6 +108,50 @@ namespace vxs_ros
                 {
                     points.emplace_back(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
                     RCLCPP_INFO_STREAM(this->get_logger(), "Point: (" << x << ", " << y << ", " << z << ")");
+                }
+                else
+                {
+                    RCLCPP_ERROR(this->get_logger(), "Invalid point read!");
+                }
+                data_ptr += size_of_fields;
+            }
+        }
+    }
+
+    void VxsSensorSubscriber::StampedPointcloudCB(const sensor_msgs::msg::PointCloud2::SharedPtr pcl_msg)
+    {
+        std::vector<vxsdk::vxXYZT> points;
+        // const uint32_t row_step = pcl_msg->row_step;
+
+        const uint32_t width = pcl_msg->width;
+        const uint32_t height = pcl_msg->height;
+        uint8_t *data_ptr = &pcl_msg->data[0];
+
+        sensor_msgs::msg::PointField x_field = pcl_msg->fields[0];
+        sensor_msgs::msg::PointField y_field = pcl_msg->fields[1];
+        sensor_msgs::msg::PointField z_field = pcl_msg->fields[2];
+        sensor_msgs::msg::PointField t_field = pcl_msg->fields[3];
+
+        // Point field datatypes. Pint coords are either FLOAT32 or FLOAT64. Timestamp is FLOAT64 (which is converted to long long)
+        const uint32_t field1_size = (x_field.datatype == 7 ? sizeof(float) : sizeof(double));
+        const uint32_t field2_size = (y_field.datatype == 7 ? sizeof(float) : sizeof(double));
+        const uint32_t field3_size = (z_field.datatype == 7 ? sizeof(float) : sizeof(double));
+        const uint32_t field4_size = sizeof(double);
+        const uint32_t size_of_fields = field1_size + field2_size + field3_size + field4_size;
+
+        for (size_t r = 0; r < height; r++)
+        {
+            for (size_t c = 0; c < width; c++)
+            {
+                const double x = x_field.datatype == 7 ? *(float *)(data_ptr + x_field.offset) : *(double *)(data_ptr + x_field.offset);
+                const double y = y_field.datatype == 7 ? *(float *)(data_ptr + y_field.offset) : *(double *)(data_ptr + y_field.offset);
+                const double z = z_field.datatype == 7 ? *(float *)(data_ptr + z_field.offset) : *(double *)(data_ptr + z_field.offset);
+                long long stamp = *(long long *)(data_ptr + t_field.offset);
+
+                if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
+                {
+                    points.emplace_back(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), stamp);
+                    RCLCPP_INFO_STREAM(this->get_logger(), "Point (x, y, z, t): (" << x << ", " << y << ", " << z << ", " << stamp << ")");
                 }
                 else
                 {

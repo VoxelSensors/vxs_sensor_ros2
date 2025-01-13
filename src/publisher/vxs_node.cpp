@@ -16,6 +16,7 @@ namespace vxs_ros
         // Declare & Get parameters
         this->declare_parameter("publish_depth_image", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_pcloud", rclcpp::PARAMETER_BOOL);
+        this->declare_parameter("publish_events", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("fps", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("config_json", rclcpp::PARAMETER_STRING);
         this->declare_parameter("calib_json", rclcpp::PARAMETER_STRING);
@@ -34,7 +35,18 @@ namespace vxs_ros
         }
         RCLCPP_INFO_STREAM(this->get_logger(), "Publishing depth image " << (publish_depth_image_ ? "YES." : "NO."));
 
-        // Publish point cloud
+        // Publish events (XYZT)
+        rclcpp::Parameter publish_events_param;
+        if (!this->get_parameter("publish_events", publish_events_param))
+        {
+            publish_events_ = true;
+        }
+        else
+        {
+            publish_events_ = publish_events_param.as_bool();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Publishing stamped point cloud: " << (publish_events_ ? "YES." : "NO."));
+
         rclcpp::Parameter publish_pcloud_param;
         if (!this->get_parameter("publish_pointcloud", publish_pcloud_param))
         {
@@ -58,6 +70,7 @@ namespace vxs_ros
             fps_ = fps_param.as_int();
             RCLCPP_INFO_STREAM(this->get_logger(), "Fps set to " << fps_);
         }
+        period_ = std::lround(1000.0f / fps_); // period in ms (will be used in initialization if streaming events)
 
         // Config json file
         rclcpp::Parameter config_json_param;
@@ -102,8 +115,19 @@ namespace vxs_ros
         }
 
         // Create publishers
-        depth_publisher_ = publish_depth_image_ ? this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10) : nullptr;
-        pcloud_publisher_ = publish_pointcloud_ ? this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10) : nullptr;
+        depth_publisher_ = nullptr;
+        if (publish_depth_image_ && !publish_events_)
+        {
+            depth_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10);
+        }
+
+        pcloud_publisher_ = nullptr;
+        if (publish_pointcloud_ && !publish_events_)
+        {
+            pcloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10);
+        }
+
+        evcloud_publisher_ = publish_events_ ? this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/events", 10) : nullptr;
 
         cam_info_publisher_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("sensor/camera_info", 10);
         // Initialize & start polling thread
@@ -128,10 +152,18 @@ namespace vxs_ros
 
     bool VxsSensorPublisher::InitSensor()
     {
-        vxsdk::pipelineType pipeline_type = vxsdk::pipelineType::fbPointcloud;
-
-        // Set the frame rate
-        vxsdk::vxSetFPS(fps_);
+        // Set the frame rate (or time window)
+        vxsdk::pipelineType pipeline_type;
+        if (publish_events_)
+        {
+            pipeline_type = vxsdk::pipelineType::all; // Get everything out XYT-XYT pairs and XYZT
+            vxsdk::vxSetStreamingDuration(period_);
+        }
+        else
+        {
+            pipeline_type = vxsdk::pipelineType::fbPointcloud;
+            vxsdk::vxSetFPS(fps_);
+        }
 
         // Start the SDK Engine.
         int cam_num = vxsdk::vxStartSystem( //
@@ -152,27 +184,36 @@ namespace vxs_ros
             while (!vxsdk::vxCheckForData())
             {
             }
-            // Get data from the sensor
-            float *frameXYZ = vxsdk::vxGetFrameXYZ();
-            counter++;
-            // Extract frame
-            std::vector<cv::Vec3f> points;
-            cv::Mat frame = UnpackSensorData(frameXYZ, points);
-            // RCLCPP_INFO_STREAM(this->get_logger(), "DONE");
-            //  Publish sensor data as a depth image
-            if (publish_depth_image_)
+            if (publish_events_) // streaming based publishing
             {
-                PublishDepthImage(frame);
+                int N;
+                vxsdk::vxXYZT *eventsXYZT = vxsdk::vxGetXYZT(N);
+                PublishStampedPointcloud(N, eventsXYZT);
             }
-            if (publish_pointcloud_)
+            else // Frame based data
             {
-                PublishPointcloud(points);
+                // Get data from the sensor
+                float *frameXYZ = vxsdk::vxGetFrameXYZ();
+                counter++;
+                // Extract frame
+                std::vector<cv::Vec3f> points;
+
+                cv::Mat frame = UnpackFrameSensorData(frameXYZ, points);
+                //   Publish sensor data as a depth image
+                if (publish_depth_image_)
+                {
+                    PublishDepthImage(frame);
+                }
+                if (publish_pointcloud_)
+                {
+                    PublishPointcloud(points);
+                }
             }
         }
         flag_in_polling_loop_ = false;
     }
 
-    cv::Mat VxsSensorPublisher::UnpackSensorData(float *frameXYZ, std::vector<cv::Vec3f> &points)
+    cv::Mat VxsSensorPublisher::UnpackFrameSensorData(float *frameXYZ, std::vector<cv::Vec3f> &points)
     {
         // Use cam #1 intrinsics for the depth image sensor
         const float &fx = cams_[0].K(0, 0);
@@ -285,6 +326,7 @@ namespace vxs_ros
                            cams_[0].K(1, 0), cams_[0].K(1, 1), cams_[0].K(1, 2), 0, //
                            cams_[0].K(2, 0), cams_[0].K(2, 1), cams_[0].K(2, 2)};
         // publish depth image and camera info
+
         depth_publisher_->publish(*depth_image_msg.get());
         cam_info_publisher_->publish(*cam_info_msg.get());
     }
@@ -339,6 +381,63 @@ namespace vxs_ros
             ptr += msg->point_step;
         }
         pcloud_publisher_->publish(*msg.get());
+    }
+
+    void VxsSensorPublisher::PublishStampedPointcloud(const int N, vxsdk::vxXYZT *eventsXYZT)
+    {
+        sensor_msgs::msg::PointCloud2::SharedPtr msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
+
+        // Set the header
+        auto evcloud_header = std_msgs::msg::Header();
+        evcloud_header.stamp = this->get_clock()->now();
+        evcloud_header.frame_id = "sensor";
+        msg->header = evcloud_header;
+        // Unordered pointcloud. Height is 1 and Width is the size (N)
+        msg->height = 1;
+        msg->width = N;
+
+        // Define the point cloud fields
+        sensor_msgs::msg::PointField x, y, z, t;
+        x.name = "x";
+        x.offset = 0;
+        x.datatype = sensor_msgs::msg::PointField::FLOAT32;
+        x.count = 1;
+        y.name = "y";
+        y.offset = 4;
+        y.datatype = sensor_msgs::msg::PointField::FLOAT32;
+        y.count = 1;
+        z.name = "z";
+        z.offset = 8;
+        z.datatype = sensor_msgs::msg::PointField::FLOAT32;
+        z.count = 1;
+        t.name = "t";
+        t.offset = 12;
+        t.datatype = sensor_msgs::msg::PointField::FLOAT64;
+        t.count = 1;
+
+        msg->fields.push_back(x);
+        msg->fields.push_back(y);
+        msg->fields.push_back(z);
+        msg->fields.push_back(t);
+
+        msg->point_step = sizeof(float) * 3 + sizeof(double); // Size of a point in bytes
+        msg->row_step = msg->point_step * msg->width;
+
+        // Allocate memory for the point cloud data
+        msg->data.resize(msg->row_step * msg->height);
+
+        // Populate the point cloud data
+        uint8_t *ptr = &msg->data[0];
+        for (size_t i = 0; i < msg->width; ++i)
+        {
+            float *point = reinterpret_cast<float *>(ptr);
+            point[0] = eventsXYZT[i].x; // X coordinate
+            point[1] = eventsXYZT[i].y; // Y coordinate
+            point[2] = eventsXYZT[i].z; // Z coordinate
+            *(double *)(ptr + t.offset) = *(double *)&(eventsXYZT[i].timestamp);
+            ptr += msg->point_step;
+        }
+        evcloud_publisher_->publish(*msg.get());
     }
 
 } // end namespace vxs_ros
