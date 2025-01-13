@@ -51,12 +51,22 @@ class VxsSensorSubscriber(Node):
 
         # Pointcloud subscriber
         pcloud_CB_group = MutuallyExclusiveCallbackGroup()
-        self.pointcloud_pub = self.create_subscription(
+        self.pointcloud_sub = self.create_subscription(
             PointCloud2,
             "/pcloud/cloud",
             self.PointcloudCB,
             qos_profile=10,
             callback_group=pcloud_CB_group,
+        )
+
+        # Timestamped pointcloud (events as 3D XYZT points) subscriber
+        evcloud_CB_group = MutuallyExclusiveCallbackGroup()
+        self.pointcloud_sub = self.create_subscription(
+            PointCloud2,
+            "/pcloud/events",
+            self.StampedPointcloudCB,
+            qos_profile=10,
+            callback_group=evcloud_CB_group,
         )
 
     def CameraInfoCB(self, cam_info_msg):
@@ -88,6 +98,34 @@ class VxsSensorSubscriber(Node):
 
         # for pt in pcd_as_numpy_array:
         #    print(pt)
+
+    def StampedPointcloudCB(self, evcloud_msg):
+        # Here we convert the 'msg', which is of the type PointCloud2.
+        # Same as above, ported function 'read_points2' from the ROS1 package.
+        # https://github.com/ros/common_msgs/blob/noetic-devel/sensor_msgs/src/sensor_msgs/point_cloud2.py
+
+        pcd_as_numpy_array = np.array(list(read_points(evcloud_msg)))
+
+        # NOTE: The 4th field will be a double that needs to be assigned (bitwise to a 64-bit int)
+        # for pt in pcd_as_numpy_array:
+        #    x = pt[0]
+        #    y = pt[1]
+        #    z = pt[2]
+        #    t = DoubleToInt64(pt[3])
+        #    print(f"(x, y, z, t) = ({x}, {y}, {z}, {t})")
+
+
+def DoubleToInt64(double_value):
+    """
+    Converts a double-precision floating-point number (double) to a 64-bit integer.
+
+    Args:
+      double_value: The double-precision floating-point number to convert.
+
+    Returns:
+      A 64-bit integer representing the bit pattern of the double.
+    """
+    return struct.unpack("<q", struct.pack("<d", double_value))[0]
 
 
 ## The code below is "ported" from
