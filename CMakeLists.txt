@@ -89,6 +89,8 @@ install(PROGRAMS
 
 if (NOT DEFINED ENV{USERNAME})
   set(USERNAME $ENV{USER})
+else()
+  set(USERNAME $ENV{USERNAME})
 endif()
 
 # Install the config files. TODO: We should have them installed and available by the SDK!
