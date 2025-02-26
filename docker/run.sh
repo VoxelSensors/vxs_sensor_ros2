@@ -71,7 +71,7 @@ docker run -it --privileged --env="DISPLAY" --gpus all \
   --volume="/home/$USER/sandbox:/home/vxs/sandbox" \
   --volume="/home/$USER/vxs_ws:/home/vxs/vxs_ws" \
   --volume="/home/$USER/sandbox:/home/vxs/sandbox" \
-  --volume="/home/george/.bash_history:/home/vxs/.bash_history" \
+  --volume="/home/$USER/.bash_history:/home/vxs/.bash_history" \
   --volume="/dev:/dev" \
   -u $(id -u):$(id -g) \
   ${DOCKER_IMAGE} fixuid -q sh -c "cd ~/;exec bash -l"
