@@ -29,6 +29,7 @@
 #include <opencv2/opencv.hpp>
 
 #include <SDK2.h>
+#include <vxEmb.h>
 
 using namespace std::chrono_literals;
 
@@ -59,6 +60,9 @@ namespace vxs_ros
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcloud_publisher_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr evcloud_publisher_;
 
+        //! EMbedded triangulation comms object
+        std::shared_ptr<vxEmb> emb_comms_;
+
         //! FPS
         int fps_;
         //! Frame/streaming window in msec
@@ -77,6 +81,13 @@ namespace vxs_ros
 
         //! Publish events flag. This should override depth + simpple pointcloud publishers
         bool publish_events_;
+
+        //! Enable embedded triangulation SDK mode
+        bool embdedded_triangulation_mode_;
+
+        //! Embedded triangulation lookup tables
+        std::string lookup_table1_ = "";
+        std::string lookup_table2_ = "";
 
         //! Shut down request flag
         bool flag_shutdown_request_;

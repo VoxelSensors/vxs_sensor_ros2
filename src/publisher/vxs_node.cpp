@@ -8,12 +8,17 @@ namespace vxs_ros
 {
     VxsSensorPublisher::VxsSensorPublisher() :                                 //
                                                Node("vxs_sensor"),             //
+                                               emb_comms_(nullptr),            //
                                                frame_polling_thread_(nullptr), //
                                                flag_shutdown_request_(false)
     {
         std::string package_share_directory = ament_index_cpp::get_package_share_directory("vxs_sensor_ros2");
         RCLCPP_INFO_STREAM(this->get_logger(), "Package share directory: " << package_share_directory);
         // Declare & Get parameters
+        this->declare_parameter("embedded_triangulation", rclcpp::PARAMETER_BOOL);
+        this->declare_parameter("lookup_table1", rclcpp::PARAMETER_STRING);
+        this->declare_parameter("lookup_table2", rclcpp::PARAMETER_STRING);
+
         this->declare_parameter("publish_depth_image", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_pcloud", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_events", rclcpp::PARAMETER_BOOL);
@@ -22,6 +27,32 @@ namespace vxs_ros
         this->declare_parameter("calib_json", rclcpp::PARAMETER_STRING);
 
         // Retrieve params
+        // Publish depth image
+        rclcpp::Parameter embedded_triangulation_param;
+        if (!this->get_parameter("embedded_triangulation", embedded_triangulation_param))
+        {
+            embedded_triangulation_mode_ = false;
+        }
+        else
+        {
+            RCLCPP_INFO_STREAM(this->get_logger(), "Embedded triangulation mode enabled."));
+            embedded_triangulation_mode_ = embedded_triangulation_param.as_bool();
+            rclcpp::Parameter lookup_table1_param;
+            if (this->get_parameter("lookup_table1", lookup_table1_param))
+            {
+                RCLCPP_ERROR_STREAM(this->get_logger(), "Embedded triangulation mode requires lookup tables! Please specify lookup table #1.");
+                rclcpp::shutdown();
+            }
+            lookup_table1_ = lookup_table1_param.as_string();
+
+            rclcpp::Parameter lookup_table2_param;
+            if (this->get_parameter("lookup_table2", lookup_table2_param))
+            {
+                RCLCPP_ERROR_STREAM(this->get_logger(), "Embedded triangulation mode requires lookup tables! Please specify lookup table #2.");
+                rclcpp::shutdown();
+            }
+            lookup_table2_ = lookup_table2_param.as_string();
+        }
 
         // Publish depth image
         rclcpp::Parameter publish_depth_param;
@@ -107,6 +138,7 @@ namespace vxs_ros
             RCLCPP_ERROR_STREAM(this->get_logger(), "Sensor initialization failed!");
             rclcpp::shutdown();
         }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Done.");
 
         // By default publish depth image
         if (!publish_pointcloud_ && !publish_depth_image_)
@@ -152,6 +184,20 @@ namespace vxs_ros
 
     bool VxsSensorPublisher::InitSensor()
     {
+        static constexpr uint32_t transfer_size = 2 * 1024 * 1024;
+        if (embedded_triangulation_mode_)
+        {
+            RCLCPP_INFO_STREAM(this->get_logger(), "Initializing embedded triamgulation comms mode.");
+            emb_comms_ = std::make_shared<vxEmb>();
+            return emb_comms_->startSystem( //
+                config_json_.c_str(),       //
+                lookup_table1_.c_str(),     //
+                lookup_table2_.c_str(),     //
+                transfer_size);
+        }
+
+        RCLCPP_INFO_STREAM(this->get_logger(), "Initializing standard SDK comms.");
+
         // Set the frame rate (or time window)
         vxsdk::pipelineType pipeline_type;
         if (publish_events_)

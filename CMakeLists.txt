@@ -62,12 +62,12 @@ set(VXS_NODE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/publisher/vxs_node.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/publisher/vxs_node_main.cpp)
 
+
 add_executable(vxs_node ${VXS_NODE_SOURCES})
 ament_target_dependencies(vxs_node ${AMENT_DEPENDENCIES})
 target_link_libraries(vxs_node ${OTHER_LIBS})
 
 SET(VXS_CPP_SUB_SOURCES 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/common.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/subscriber/vxs_subscriber.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/subscriber/vxs_subscriber.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/subscriber/vxs_subscriber_main.cpp)

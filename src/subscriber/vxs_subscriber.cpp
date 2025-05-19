@@ -5,6 +5,7 @@
 #include "subscriber/vxs_subscriber.hpp"
 
 #include <pcl_conversions/pcl_conversions.h> // For converting between ROS and PCL types
+
 namespace vxs_ros
 {
     VxsSensorSubscriber::VxsSensorSubscriber() : Node("vxs_cpp_subscriber"), cam_(nullptr)
