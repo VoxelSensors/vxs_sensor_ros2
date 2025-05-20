@@ -83,7 +83,7 @@ namespace vxs_ros
         bool publish_events_;
 
         //! Enable embedded triangulation SDK mode
-        bool embdedded_triangulation_mode_;
+        bool embedded_triangulation_mode_;
 
         //! Embedded triangulation lookup tables
         std::string lookup_table1_ = "";

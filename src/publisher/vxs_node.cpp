@@ -8,9 +8,10 @@ namespace vxs_ros
 {
     VxsSensorPublisher::VxsSensorPublisher() :                                 //
                                                Node("vxs_sensor"),             //
-                                               emb_comms_(nullptr),            //
                                                frame_polling_thread_(nullptr), //
-                                               flag_shutdown_request_(false)
+                                               emb_comms_(nullptr),            //
+                                               flag_shutdown_request_(false)   //
+
     {
         std::string package_share_directory = ament_index_cpp::get_package_share_directory("vxs_sensor_ros2");
         RCLCPP_INFO_STREAM(this->get_logger(), "Package share directory: " << package_share_directory);
@@ -35,7 +36,7 @@ namespace vxs_ros
         }
         else
         {
-            RCLCPP_INFO_STREAM(this->get_logger(), "Embedded triangulation mode enabled."));
+            RCLCPP_INFO_STREAM(this->get_logger(), "Embedded triangulation mode enabled.");
             embedded_triangulation_mode_ = embedded_triangulation_param.as_bool();
             rclcpp::Parameter lookup_table1_param;
             if (this->get_parameter("lookup_table1", lookup_table1_param))
@@ -189,11 +190,11 @@ namespace vxs_ros
         {
             RCLCPP_INFO_STREAM(this->get_logger(), "Initializing embedded triamgulation comms mode.");
             emb_comms_ = std::make_shared<vxEmb>();
-            return emb_comms_->startSystem( //
-                config_json_.c_str(),       //
-                lookup_table1_.c_str(),     //
-                lookup_table2_.c_str(),     //
-                transfer_size);
+            return emb_comms_->startSystem(    //
+                       config_json_.c_str(),   //
+                       lookup_table1_.c_str(), //
+                       lookup_table2_.c_str(), //
+                       transfer_size) > 0;
         }
 
         RCLCPP_INFO_STREAM(this->get_logger(), "Initializing standard SDK comms.");
