@@ -99,6 +99,8 @@ namespace vxs_ros
 
         //! Initializae sensor
         bool InitSensor();
+        //! Embedded triangulation polling loop
+        void EmbeddedTriangPollingLoop();
         //! The main loop of the frame ppolling thread
         void FramePollingLoop();
         //! Unpack sensor data into a cv::Mat and return 3D points
@@ -112,6 +114,8 @@ namespace vxs_ros
         void PublishPointcloud(const std::vector<cv::Vec3f> &points);
         //! Pubish stamped pointcloud
         void PublishStampedPointcloud(const int N, vxsdk::vxXYZT *eventsXYZT);
+        //! Pubish stamped pointcloud from embedded triangulation data
+        void PublishStampedPointcloudET(const int N, uint16_t *buffer_16bits);
     };
 
 } // end namespace vxs_ros
