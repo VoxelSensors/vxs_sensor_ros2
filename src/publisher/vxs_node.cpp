@@ -39,7 +39,7 @@ namespace vxs_ros
             RCLCPP_INFO_STREAM(this->get_logger(), "Embedded triangulation mode enabled.");
             embedded_triangulation_mode_ = embedded_triangulation_param.as_bool();
             rclcpp::Parameter lookup_table1_param;
-            if (this->get_parameter("lookup_table1", lookup_table1_param))
+            if (!this->get_parameter("lookup_table1", lookup_table1_param))
             {
                 RCLCPP_ERROR_STREAM(this->get_logger(), "Embedded triangulation mode requires lookup tables! Please specify lookup table #1.");
                 rclcpp::shutdown();
@@ -47,7 +47,7 @@ namespace vxs_ros
             lookup_table1_ = lookup_table1_param.as_string();
 
             rclcpp::Parameter lookup_table2_param;
-            if (this->get_parameter("lookup_table2", lookup_table2_param))
+            if (!this->get_parameter("lookup_table2", lookup_table2_param))
             {
                 RCLCPP_ERROR_STREAM(this->get_logger(), "Embedded triangulation mode requires lookup tables! Please specify lookup table #2.");
                 rclcpp::shutdown();
@@ -190,11 +190,13 @@ namespace vxs_ros
         {
             RCLCPP_INFO_STREAM(this->get_logger(), "Initializing embedded triamgulation comms mode.");
             emb_comms_ = std::make_shared<vxEmb>();
-            return emb_comms_->startSystem(    //
-                       config_json_.c_str(),   //
-                       lookup_table1_.c_str(), //
-                       lookup_table2_.c_str(), //
-                       transfer_size) > 0;
+            int num_cams = emb_comms_->startSystem(    //
+                               config_json_.c_str(),   //
+                               lookup_table1_.c_str(), //
+                               lookup_table2_.c_str(), //
+                               transfer_size) > 0;
+            RCLCPP_INFO_STREAM(this->get_logger(), "Number of cams return by sensorInit: " << num_cams);
+            return num_cams;
         }
 
         RCLCPP_INFO_STREAM(this->get_logger(), "Initializing standard SDK comms.");
@@ -225,10 +227,13 @@ namespace vxs_ros
     {
         flag_in_polling_loop_ = true;
         int counter = 0;
+        RCLCPP_INFO_STREAM(this->get_logger(), "Starting embedded triang. polling loop...");
         while (!flag_shutdown_request_)
         {
             int num_points = 0;
             char **buffer = emb_comms_->getData(num_points);
+            RCLCPP_INFO_STREAM(this->get_logger(), "Number of points: " << num_points);
+
             if (num_points <= 0)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
