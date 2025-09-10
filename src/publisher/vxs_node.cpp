@@ -21,7 +21,7 @@ namespace vxs_ros
         this->declare_parameter("lookup_table2", rclcpp::PARAMETER_STRING);
 
         this->declare_parameter("publish_depth_image", rclcpp::PARAMETER_BOOL);
-        this->declare_parameter("publish_pcloud", rclcpp::PARAMETER_BOOL);
+        this->declare_parameter("publish_pointcloud", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_events", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("fps", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("config_json", rclcpp::PARAMETER_STRING);
@@ -39,7 +39,7 @@ namespace vxs_ros
             RCLCPP_INFO_STREAM(this->get_logger(), "Embedded triangulation mode enabled.");
             embedded_triangulation_mode_ = embedded_triangulation_param.as_bool();
             rclcpp::Parameter lookup_table1_param;
-            if (this->get_parameter("lookup_table1", lookup_table1_param))
+            if (!this->get_parameter("lookup_table1", lookup_table1_param))
             {
                 RCLCPP_ERROR_STREAM(this->get_logger(), "Embedded triangulation mode requires lookup tables! Please specify lookup table #1.");
                 rclcpp::shutdown();
@@ -47,7 +47,7 @@ namespace vxs_ros
             lookup_table1_ = lookup_table1_param.as_string();
 
             rclcpp::Parameter lookup_table2_param;
-            if (this->get_parameter("lookup_table2", lookup_table2_param))
+            if (!this->get_parameter("lookup_table2", lookup_table2_param))
             {
                 RCLCPP_ERROR_STREAM(this->get_logger(), "Embedded triangulation mode requires lookup tables! Please specify lookup table #2.");
                 rclcpp::shutdown();
@@ -59,7 +59,7 @@ namespace vxs_ros
         rclcpp::Parameter publish_depth_param;
         if (!this->get_parameter("publish_depth_image", publish_depth_param))
         {
-            publish_depth_image_ = true;
+            publish_depth_image_ = false;
         }
         else
         {
@@ -71,7 +71,8 @@ namespace vxs_ros
         rclcpp::Parameter publish_events_param;
         if (!this->get_parameter("publish_events", publish_events_param))
         {
-            publish_events_ = true;
+            // Support frame-based mode by default
+            publish_events_ = false;
         }
         else
         {
@@ -82,7 +83,7 @@ namespace vxs_ros
         rclcpp::Parameter publish_pcloud_param;
         if (!this->get_parameter("publish_pointcloud", publish_pcloud_param))
         {
-            publish_pointcloud_ = true;
+            publish_pointcloud_ = false;
         }
         else
         {
@@ -141,21 +142,30 @@ namespace vxs_ros
         }
         RCLCPP_INFO_STREAM(this->get_logger(), "Done.");
 
-        // By default publish depth image
-        if (!publish_pointcloud_ && !publish_depth_image_)
+        // Resolve conflicting flags in logic
+        if (publish_events_)
         {
-            publish_depth_image_ = true;
+            publish_depth_image_ = false; // no depth image
+            publish_pointcloud_ = false;  // no simple (XYZ) point cloud (will be XYZT)
+        }
+        else
+        {
+            // Publish pointcloud by default in frame-based mode
+            if (!publish_depth_image_ && !publish_pointcloud_)
+            {
+                publish_depth_image_ = true;
+            }
         }
 
         // Create publishers
         depth_publisher_ = nullptr;
-        if (publish_depth_image_ && !publish_events_)
+        if (publish_depth_image_)
         {
             depth_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10);
         }
 
         pcloud_publisher_ = nullptr;
-        if (publish_pointcloud_ && !publish_events_)
+        if (publish_pointcloud_)
         {
             pcloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10);
         }

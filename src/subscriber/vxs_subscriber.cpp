@@ -67,7 +67,7 @@ namespace vxs_ros
         try
         {
             cv::Mat depth_img = cv_bridge::toCvShare(depth_img_msg, sensor_msgs::image_encodings::MONO16)->image;
-            cv::imshow("view", depth_img);
+            cv::imshow("view", depth_img * 100);
             cv::waitKey(10);
         }
         catch (const cv_bridge::Exception &e)

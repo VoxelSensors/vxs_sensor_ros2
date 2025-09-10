@@ -70,22 +70,31 @@ class VxsSensorSubscriber(Node):
         )
 
     def CameraInfoCB(self, cam_info_msg):
-        if self.k is not None:
+        if self.K is not None:
             return
         self.K = np.array(cam_info_msg.k, dtype=np.float32).reshape(3, 3)
-        self.P = np.array(cam_info_msg.p, dtype=np.float(32)).reshape(3, 4)
-        self.R = np.array(cam_info_msg.r, dtype=np.float(32)).reshape(3, 3)
-        self.d = np.array(cam_info_msg.d, dtype=np.float(32))
+        self.P = np.array(cam_info_msg.p, dtype=np.float32).reshape(3, 4)
+        self.R = np.array(cam_info_msg.r, dtype=np.float32).reshape(3, 3)
+        self.d = np.array(cam_info_msg.d, dtype=np.float32)
         print("Calibration acquired!")
+        print("Intrinsics (K): ", self.K)
+        print("Projection matrix (P): ", self.P)
+        print("Rectification (R): ", self.R)
+        print("Distortion (d): ", self.d)
 
     def DepthCB(self, depth_img_msg):
         try:
-            cv_image = self.bridge.imgmsg_to_cv2(depth_img_msg, "bgr8")
+            cv_image = self.bridge.imgmsg_to_cv2(depth_img_msg, "mono16")
         except CvBridgeError as e:
             print(e)
             return
-        (rows, cols, channels) = cv_image.shape
-        cv2.imshow("Image window", cv_image)
+        (rows, cols) = cv_image.shape
+        disp_image = 100 * cv_image
+        # for r in range(rows):
+        #    for c in range(rows):
+        #        if cv_image[r, c] > 0:
+        #            print("Non zero depth: ", cv_image[r, c])
+        cv2.imshow("Image window", disp_image)
         cv2.waitKey(3)
 
     def PointcloudCB(self, pcloud_msg):
