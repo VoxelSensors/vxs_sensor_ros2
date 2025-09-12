@@ -6,6 +6,9 @@
 
 namespace vxs_ros
 {
+    const float FilteringParams::DEFAULT_PREFILTERING_THRESH = 2.0;
+    const float FilteringParams::DEFAULT_FILTERP1 = 0.1;
+
     VxsSensorPublisher::VxsSensorPublisher() :                                 //
                                                Node("vxs_sensor"),             //
                                                frame_polling_thread_(nullptr), //
@@ -26,6 +29,13 @@ namespace vxs_ros
         this->declare_parameter("fps", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("config_json", rclcpp::PARAMETER_STRING);
         this->declare_parameter("calib_json", rclcpp::PARAMETER_STRING);
+
+        // Filtering parameters
+        this->declare_parameter("binning_amount", rclcpp::PARAMETER_INTEGER);
+        this->declare_parameter("prefiltering_threshold", rclcpp::PARAMETER_DOUBLE);
+        this->declare_parameter("filterP1", rclcpp::PARAMETER_DOUBLE);
+        this->declare_parameter("temporal_threshold", rclcpp::PARAMETER_INTEGER);
+        this->declare_parameter("spatial_threshold", rclcpp::PARAMETER_INTEGER);
 
         // Retrieve params
         // Publish depth image
@@ -131,6 +141,61 @@ namespace vxs_ros
             RCLCPP_INFO_STREAM(this->get_logger(), "Calibration JSON is " << calib_json_);
         }
 
+        rclcpp::Parameter binning_amount_param;
+        if (!this->get_parameter("binning_amount", binning_amount_param))
+        {
+            filtering_params_.binning_amount = FilteringParams::DEFAULT_BINNING;
+        }
+        else
+        {
+            filtering_params_.binning_amount = binning_amount_param.as_int();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Binning amount: " << filtering_params_.binning_amount);
+
+        rclcpp::Parameter prefiltering_threshold_param;
+        if (!this->get_parameter("prefiltering_threshold", prefiltering_threshold_param))
+        {
+            filtering_params_.prefiltering_threshold = FilteringParams::DEFAULT_PREFILTERING_THRESH;
+        }
+        else
+        {
+            filtering_params_.prefiltering_threshold = prefiltering_threshold_param.as_double();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Prefiltering threshold: " << filtering_params_.prefiltering_threshold);
+
+        rclcpp::Parameter filterP1_param;
+        if (!this->get_parameter("filterP1", filterP1_param))
+        {
+            filtering_params_.filterP1 = FilteringParams::DEFAULT_FILTERP1;
+        }
+        else
+        {
+            filtering_params_.filterP1 = filterP1_param.as_double();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- FilterP1: " << filtering_params_.filterP1);
+
+        rclcpp::Parameter temporal_threshold_param;
+        if (!this->get_parameter("temporal_threshold", temporal_threshold_param))
+        {
+            filtering_params_.temporal_threshold = FilteringParams::DEFAULT_TEMPORAL_THRESH;
+        }
+        else
+        {
+            filtering_params_.temporal_threshold = temporal_threshold_param.as_int();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Temporal threshold: " << filtering_params_.temporal_threshold);
+
+        rclcpp::Parameter spatial_threshold_param;
+        if (!this->get_parameter("spatial_threshold", spatial_threshold_param))
+        {
+            filtering_params_.spatial_threshold = FilteringParams::DEFAULT_SPATIAL_THRESH;
+        }
+        else
+        {
+            filtering_params_.spatial_threshold = spatial_threshold_param.as_int();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Spatial threshold: " << filtering_params_.spatial_threshold);
+
         // Load calibration into members
         LoadCalibrationFromJson(calib_json_);
 
@@ -221,6 +286,14 @@ namespace vxs_ros
             pipeline_type = vxsdk::pipelineType::fbPointcloud;
             vxsdk::vxSetFPS(fps_);
         }
+
+        // Set filtering parameters
+        vxsdk::vxSetBinningAmount(filtering_params_.binning_amount);
+        vxsdk::vxSetFilteringParameters(              //
+            filtering_params_.prefiltering_threshold, //
+            filtering_params_.filterP1,               //
+            filtering_params_.temporal_threshold,     //
+            filtering_params_.spatial_threshold);
 
         // Start the SDK Engine.
         int cam_num = vxsdk::vxStartSystem( //
