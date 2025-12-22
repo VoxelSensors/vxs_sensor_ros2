@@ -153,14 +153,19 @@ or,
 
 - **publish_depth_image (bool)** : Will work only in **frame-based** communications mode with the sensor and publish a *depth image* in topic `depth/image`. Will be overriden (forced **false**) if **publish_events** is set to **true**.
 - **publish_pointcloud (bool)**  : Will work only in **frame-based** communications with the sensor and publish a *pointcloud* in topic `pcloud/cloud`. As above with `publish_depth_image`, it will be overriden (forced **false**) if **publish_events** is set to **true**.
-- **publish_events (bool)**      : If **publish_depth_image** or **publish_pointcloud** are not specified then setting this argument to **true** will force the node to initialize communications in **streaming mode** with the sensor. In this communications mode, the nose will publish a **stamped pointcloud** which will represent events (`XYZt`) in 3D space and time between two time instances defined by a a period `1000/fps (ms)` (see below about argument **fps**). Will override `publish_depth_image` and `publish_pointcloud`.     
+- **publish_events (bool)**      : Set this argument to **true** to force the node to initialize communications in **streaming mode** with the sensor. In this communications mode, the nose will publish a **stamped pointcloud** which will represent events (`XYZt`) in 3D space and time between two time instances defined by a a period `1000/fps (ms)` (see below about argument **fps**). Will override `publish_depth_image` and `publish_pointcloud`.     
+- **publish_imu**                : If set, IMU samples from the sensor will be published. The flag can be set only when using streaming mode (i.e., publish_events = true).
 - **fps (int)**                  : If using **frame-based mode** (see first two arguments), it specifies the frame-rate. For frame-based mode, then **valid fps values are 1, 15, 30, 60, 90, 180**. Otherwise, if the node is on **streaming mode**, then **fps** can have any positive value and will determine the **period throughout which it will capture events (i.e. `XYZt` data).
 - **config_json (string)**       : The full path to the SDK configuration json.
 - **calib_json (string)**        : The full path to the calibration json.
+- **sleep_time_ms (int)**        : Time to set the polling thread to sleep while waiting for a new frame/batch of events.
 - **binning_amount (int)**              : (Filtering arg. 1). Default: 0
 - **prefiltering_threshold (float)**    : (Filtering arg. 2). Default: 2.0
-- **filterP1 (float)**                  : (Filtering arg. 3). Default: 0.1
-- **temporal_threshold (int)**          : (Filtering arg. 4). Default: 4
-- **spatial_threshold (int)**           : (Filtering arg. 5). Default: 10
+- **postfiltering_threshold (int)**     : (Filtering arg. 3). Default: 5
+- **filterP1X (float)**                 : (Filtering arg. 4). Default: 0.1
+- **filterP1X (float)**                 : (Filtering arg. 5). Default: 0.1
+- **temporal_threshold (int)**          : (Filtering arg. 6). Default: 4
+- **spatial_threshold (int)**           : (Filtering arg. 7). Default: 10
+- **median_rejection_threshold (int)**  : (Filtering arg. 8). Default: 5
 
 **NOTE**: If none of the three first arguments that determine sensor communication mode are set, then the node will internally set **publish_pointcloud** to **true**.
