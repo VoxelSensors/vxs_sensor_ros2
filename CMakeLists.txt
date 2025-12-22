@@ -58,6 +58,8 @@ ament_python_install_package(${PROJECT_NAME})
 include_directories(${VXS_NODE_INCLUDE_DIRS})
 set(VXS_NODE_SOURCES 
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/imu.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/imu.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/publisher/vxs_node.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/publisher/vxs_node.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/publisher/vxs_node_main.cpp)

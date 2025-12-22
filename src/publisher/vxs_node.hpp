@@ -109,6 +109,9 @@ namespace vxs_ros
         //! Publish events flag. This should override depth + simpple pointcloud publishers
         bool publish_events_;
 
+        //! Publish imu samples (if available)
+        bool publish_imu_;
+
         //! Enable embedded triangulation SDK mode
         bool embedded_triangulation_mode_;
 

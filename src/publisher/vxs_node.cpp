@@ -231,6 +231,17 @@ namespace vxs_ros
         }
         RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Median rejection threshold: " << filtering_params_.median_rejection_threshold);
 
+        rclcpp::Parameter publish_imu_param;
+        if (!this->get_parameter("publish_imu", publish_imu_param))
+        {
+            publish_imu_ = false;
+        }
+        else
+        {
+            publish_imu_ = publish_imu_param.as_bool();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Publish IMU samples: " << (publish_imu_ ? "YES" : "NO"));
+
         // Do some logic to resolve conflicting flags regarding frame-based and/or event/streaming/timestamped mode
         if (publish_events_)
         {
@@ -248,13 +259,12 @@ namespace vxs_ros
             }
             RCLCPP_INFO_STREAM(this->get_logger(), "Pointcloud publisher: " << (publish_pointcloud_ ? "ENABLED." : "DISABLED."));
             RCLCPP_INFO_STREAM(this->get_logger(), "Depth image publisher: " << (publish_depth_image_ ? "ENABLED." : "DISABLED."));
-            /*
+
             if (publish_imu_)
             {
                 publish_imu_ = false;
                 RCLCPP_INFO_STREAM(this->get_logger(), "IMU sample will **NOT** be published in frame mode... ");
             }
-            */
         }
 
         // Load calibration into members
