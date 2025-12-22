@@ -172,7 +172,7 @@ namespace vxs_ros
         }
         else
         {
-            filtering_params_.postfiltering_threshold = postfiltering_threshold_param.as_double();
+            filtering_params_.postfiltering_threshold = postfiltering_threshold_param.as_int();
         }
         RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Postfiltering threshold: " << filtering_params_.postfiltering_threshold);
 
