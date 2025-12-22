@@ -6,6 +6,10 @@
 
 namespace vxs_ros
 {
+    const float FilteringParams::DEFAULT_PREFILTERING_THRESH = 2.0;
+    const float FilteringParams::DEFAULT_FILTERP1X = 0.1;
+    const float FilteringParams::DEFAULT_FILTERP1Y = 0.1;
+
     VxsSensorPublisher::VxsSensorPublisher() :                                 //
                                                Node("vxs_sensor"),             //
                                                frame_polling_thread_(nullptr), //
@@ -26,6 +30,14 @@ namespace vxs_ros
         this->declare_parameter("fps", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("config_json", rclcpp::PARAMETER_STRING);
         this->declare_parameter("calib_json", rclcpp::PARAMETER_STRING);
+
+        // Filtering parameters
+        this->declare_parameter("binning_amount", rclcpp::PARAMETER_INTEGER);
+        this->declare_parameter("prefiltering_threshold", rclcpp::PARAMETER_DOUBLE);
+        this->declare_parameter("filterP1X", rclcpp::PARAMETER_DOUBLE);
+        this->declare_parameter("filterP1Y", rclcpp::PARAMETER_DOUBLE);
+        this->declare_parameter("temporal_threshold", rclcpp::PARAMETER_INTEGER);
+        this->declare_parameter("spatial_threshold", rclcpp::PARAMETER_INTEGER);
 
         // Retrieve params
         // Publish depth image
@@ -55,18 +67,6 @@ namespace vxs_ros
             lookup_table2_ = lookup_table2_param.as_string();
         }
 
-        // Publish depth image
-        rclcpp::Parameter publish_depth_param;
-        if (!this->get_parameter("publish_depth_image", publish_depth_param))
-        {
-            publish_depth_image_ = false;
-        }
-        else
-        {
-            publish_depth_image_ = publish_depth_param.as_bool();
-        }
-        RCLCPP_INFO_STREAM(this->get_logger(), "Publishing depth image " << (publish_depth_image_ ? "YES." : "NO."));
-
         // Publish events (XYZT)
         rclcpp::Parameter publish_events_param;
         if (!this->get_parameter("publish_events", publish_events_param))
@@ -78,7 +78,19 @@ namespace vxs_ros
         {
             publish_events_ = publish_events_param.as_bool();
         }
-        RCLCPP_INFO_STREAM(this->get_logger(), "Publishing stamped point cloud: " << (publish_events_ ? "YES." : "NO."));
+        // RCLCPP_INFO_STREAM(this->get_logger(), "Publishing stamped point cloud (events): " << (publish_events_ ? "YES." : "NO."));
+
+        // Publish depth image
+        rclcpp::Parameter publish_depth_param;
+        if (!this->get_parameter("publish_depth_image", publish_depth_param))
+        {
+            publish_depth_image_ = false;
+        }
+        else
+        {
+            publish_depth_image_ = publish_depth_param.as_bool();
+        }
+        // RCLCPP_INFO_STREAM(this->get_logger(), "Publishing depth image " << (publish_depth_image_ ? "YES." : "NO."));
 
         rclcpp::Parameter publish_pcloud_param;
         if (!this->get_parameter("publish_pointcloud", publish_pcloud_param))
@@ -89,7 +101,7 @@ namespace vxs_ros
         {
             publish_pointcloud_ = publish_pcloud_param.as_bool();
         }
-        RCLCPP_INFO_STREAM(this->get_logger(), "Publishing point cloud: " << (publish_pointcloud_ ? "YES." : "NO."));
+        // RCLCPP_INFO_STREAM(this->get_logger(), "Publishing point cloud: " << (publish_pointcloud_ ? "YES." : "NO."));
 
         // FPS
         rclcpp::Parameter fps_param;
@@ -131,6 +143,120 @@ namespace vxs_ros
             RCLCPP_INFO_STREAM(this->get_logger(), "Calibration JSON is " << calib_json_);
         }
 
+        rclcpp::Parameter binning_amount_param;
+        if (!this->get_parameter("binning_amount", binning_amount_param))
+        {
+            filtering_params_.binning_amount = FilteringParams::DEFAULT_BINNING;
+        }
+        else
+        {
+            filtering_params_.binning_amount = binning_amount_param.as_int();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Binning amount: " << filtering_params_.binning_amount);
+
+        rclcpp::Parameter prefiltering_threshold_param;
+        if (!this->get_parameter("prefiltering_threshold", prefiltering_threshold_param))
+        {
+            filtering_params_.prefiltering_threshold = FilteringParams::DEFAULT_PREFILTERING_THRESH;
+        }
+        else
+        {
+            filtering_params_.prefiltering_threshold = prefiltering_threshold_param.as_double();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Prefiltering threshold: " << filtering_params_.prefiltering_threshold);
+
+        rclcpp::Parameter postfiltering_threshold_param;
+        if (!this->get_parameter("postfiltering_threshold", postfiltering_threshold_param))
+        {
+            filtering_params_.postfiltering_threshold = FilteringParams::DEFAULT_POSTFILTERING_THRESH;
+        }
+        else
+        {
+            filtering_params_.postfiltering_threshold = postfiltering_threshold_param.as_double();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Postfiltering threshold: " << filtering_params_.postfiltering_threshold);
+
+        rclcpp::Parameter filterP1X_param;
+        if (!this->get_parameter("filterP1X", filterP1X_param))
+        {
+            filtering_params_.filterP1X = FilteringParams::DEFAULT_FILTERP1X;
+        }
+        else
+        {
+            filtering_params_.filterP1X = filterP1X_param.as_double();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- FilterP1X: " << filtering_params_.filterP1X);
+
+        rclcpp::Parameter filterP1Y_param;
+        if (!this->get_parameter("filterP1Y", filterP1Y_param))
+        {
+            filtering_params_.filterP1Y = FilteringParams::DEFAULT_FILTERP1Y;
+        }
+        else
+        {
+            filtering_params_.filterP1Y = filterP1Y_param.as_double();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- FilterP1Y: " << filtering_params_.filterP1Y);
+
+        rclcpp::Parameter temporal_threshold_param;
+        if (!this->get_parameter("temporal_threshold", temporal_threshold_param))
+        {
+            filtering_params_.temporal_threshold = FilteringParams::DEFAULT_TEMPORAL_THRESH;
+        }
+        else
+        {
+            filtering_params_.temporal_threshold = temporal_threshold_param.as_int();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Temporal threshold: " << filtering_params_.temporal_threshold);
+
+        rclcpp::Parameter spatial_threshold_param;
+        if (!this->get_parameter("spatial_threshold", spatial_threshold_param))
+        {
+            filtering_params_.spatial_threshold = FilteringParams::DEFAULT_SPATIAL_THRESH;
+        }
+        else
+        {
+            filtering_params_.spatial_threshold = spatial_threshold_param.as_int();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Spatial threshold: " << filtering_params_.spatial_threshold);
+
+        rclcpp::Parameter median_rejection_threshold_param;
+        if (!this->get_parameter("median_rejection_threshold", median_rejection_threshold_param))
+        {
+            filtering_params_.median_rejection_threshold = FilteringParams::DEFAULT_MEDIAN_REJECTION_THRESH;
+        }
+        else
+        {
+            filtering_params_.median_rejection_threshold = median_rejection_threshold_param.as_int();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Median rejection threshold: " << filtering_params_.median_rejection_threshold);
+
+        // Do some logic to resolve conflicting flags regarding frame-based and/or event/streaming/timestamped mode
+        if (publish_events_)
+        {
+            // Disable both standard pointcloud and depth image publishing
+            publish_depth_image_ = publish_pointcloud_ = false;
+            RCLCPP_INFO_STREAM(this->get_logger(), "Streaming mode (event based) enabled. Disabling depth and standard pointcloud poublishers.");
+        }
+        else
+        {
+            // Force pointcloud publishing by default if running frame based mode
+            if (!publish_depth_image_ && !publish_pointcloud_)
+            {
+                publish_depth_image_ = true;
+                RCLCPP_INFO_STREAM(this->get_logger(), "Running frame based mode. Enabling pointcloud publisher...");
+            }
+            RCLCPP_INFO_STREAM(this->get_logger(), "Pointcloud publisher: " << (publish_pointcloud_ ? "ENABLED." : "DISABLED."));
+            RCLCPP_INFO_STREAM(this->get_logger(), "Depth image publisher: " << (publish_depth_image_ ? "ENABLED." : "DISABLED."));
+            /*
+            if (publish_imu_)
+            {
+                publish_imu_ = false;
+                RCLCPP_INFO_STREAM(this->get_logger(), "IMU sample will **NOT** be published in frame mode... ");
+            }
+            */
+        }
+
         // Load calibration into members
         LoadCalibrationFromJson(calib_json_);
 
@@ -141,21 +267,6 @@ namespace vxs_ros
             rclcpp::shutdown();
         }
         RCLCPP_INFO_STREAM(this->get_logger(), "Done.");
-
-        // Resolve conflicting flags in logic
-        if (publish_events_)
-        {
-            publish_depth_image_ = false; // no depth image
-            publish_pointcloud_ = false;  // no simple (XYZ) point cloud (will be XYZT)
-        }
-        else
-        {
-            // Publish pointcloud by default in frame-based mode
-            if (!publish_depth_image_ && !publish_pointcloud_)
-            {
-                publish_depth_image_ = true;
-            }
-        }
 
         // Create publishers
         depth_publisher_ = nullptr;
@@ -221,6 +332,17 @@ namespace vxs_ros
             pipeline_type = vxsdk::pipelineType::fbPointcloud;
             vxsdk::vxSetFPS(fps_);
         }
+
+        // Set filtering parameters
+        vxsdk::vxSetBinningAmount(filtering_params_.binning_amount);
+        vxsdk::vxSetFilteringParameters(                  //
+            filtering_params_.prefiltering_threshold,     //
+            filtering_params_.postfiltering_threshold,    //
+            filtering_params_.median_rejection_threshold, //
+            filtering_params_.filterP1X,                  //
+            filtering_params_.filterP1Y,                  //
+            filtering_params_.temporal_threshold,         //
+            filtering_params_.spatial_threshold);
 
         // Start the SDK Engine.
         int cam_num = vxsdk::vxStartSystem( //

@@ -36,6 +36,33 @@ using namespace std::chrono_literals;
 namespace vxs_ros
 {
     struct CameraCalibration;
+
+    //! Filtering parameters
+    struct FilteringParams
+    {
+        static const int DEFAULT_BINNING = 0;
+        static const float DEFAULT_PREFILTERING_THRESH;    // = 2.0;
+        static const int DEFAULT_POSTFILTERING_THRESH = 5; //
+
+        static const float DEFAULT_FILTERP1X; // = 0.1;
+        static const float DEFAULT_FILTERP1Y; // = 0.1;
+        static const int DEFAULT_TEMPORAL_THRESH = 4;
+        static const int DEFAULT_SPATIAL_THRESH = 10;
+
+        static const int DEFAULT_MEDIAN_REJECTION_THRESH = 5; //
+
+        int binning_amount = DEFAULT_BINNING;
+        float prefiltering_threshold = DEFAULT_PREFILTERING_THRESH;
+        int postfiltering_threshold = DEFAULT_POSTFILTERING_THRESH;
+
+        float filterP1X = DEFAULT_FILTERP1X;
+        float filterP1Y = DEFAULT_FILTERP1Y;
+        int temporal_threshold = DEFAULT_TEMPORAL_THRESH;
+        int spatial_threshold = DEFAULT_SPATIAL_THRESH;
+
+        int median_rejection_threshold = DEFAULT_MEDIAN_REJECTION_THRESH;
+    };
+
     class VxsSensorPublisher : public rclcpp::Node
     {
 
@@ -96,6 +123,9 @@ namespace vxs_ros
 
         //! Camera #1 calibration
         std::vector<CameraCalibration> cams_;
+
+        //! Filtering parameters
+        FilteringParams filtering_params_;
 
         //! Initializae sensor
         bool InitSensor();
