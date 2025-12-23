@@ -21,6 +21,7 @@
 #include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
+#include "sensor_msgs/msg/imu.hpp"
 #include <cv_bridge/cv_bridge.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -33,6 +34,10 @@
 
 using namespace std::chrono_literals;
 
+namespace imu
+{
+    struct IMUSample;
+}
 namespace vxs_ros
 {
     struct CameraCalibration;
@@ -86,6 +91,7 @@ namespace vxs_ros
         rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_publisher_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcloud_publisher_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr evcloud_publisher_;
+        rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher_;
 
         //! EMbedded triangulation comms object
         std::shared_ptr<vxEmb> emb_comms_;
@@ -130,6 +136,15 @@ namespace vxs_ros
         //! Filtering parameters
         FilteringParams filtering_params_;
 
+        //! Reference ros Time for both frames and imu samples.
+        rclcpp::Time ref_time_;
+        //! Reference time in the sensor
+        double sensor_ref_time_;
+        //! Flag indicating that reference time is initialized
+        bool flag_ref_time_initialized_;
+        //! Mutex for reference time members
+        std::shared_timed_mutex ref_time_mutex_;
+
         //! Initializae sensor
         bool InitSensor();
         //! The main loop of the frame ppolling thread
@@ -145,6 +160,8 @@ namespace vxs_ros
         void PublishPointcloud(const std::vector<cv::Vec3f> &points);
         //! Pubish stamped pointcloud
         void PublishStampedPointcloud(const int N, vxsdk::vxXYZT *eventsXYZT);
+        //! Publish an IMU sample
+        void PublishIMUSample(const imu::IMUSample &sample);
     };
 
 } // end namespace vxs_ros

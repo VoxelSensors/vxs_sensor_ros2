@@ -3,6 +3,7 @@
 
 #include "publisher/vxs_node.hpp"
 #include "common.hpp"
+#include "imu.hpp"
 
 namespace vxs_ros
 {
@@ -14,7 +15,8 @@ namespace vxs_ros
                                                Node("vxs_sensor"),             //
                                                frame_polling_thread_(nullptr), //
                                                emb_comms_(nullptr),            //
-                                               flag_shutdown_request_(false)   //
+                                               flag_shutdown_request_(false),  //
+                                               flag_ref_time_initialized_(false)
 
     {
         std::string package_share_directory = ament_index_cpp::get_package_share_directory("vxs_sensor_ros2");
@@ -24,6 +26,7 @@ namespace vxs_ros
         this->declare_parameter("lookup_table1", rclcpp::PARAMETER_STRING);
         this->declare_parameter("lookup_table2", rclcpp::PARAMETER_STRING);
 
+        this->declare_parameter("publish_imu", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_depth_image", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_pointcloud", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_events", rclcpp::PARAMETER_BOOL);
@@ -38,6 +41,7 @@ namespace vxs_ros
         this->declare_parameter("filterP1Y", rclcpp::PARAMETER_DOUBLE);
         this->declare_parameter("temporal_threshold", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("spatial_threshold", rclcpp::PARAMETER_INTEGER);
+        this->declare_parameter("median_rejection_threshold", rclcpp::PARAMETER_INTEGER);
 
         // Retrieve params
         // Publish depth image
@@ -279,21 +283,16 @@ namespace vxs_ros
         RCLCPP_INFO_STREAM(this->get_logger(), "Done.");
 
         // Create publishers
-        depth_publisher_ = nullptr;
-        if (publish_depth_image_)
-        {
-            depth_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10);
-        }
+        depth_publisher_ = publish_depth_image_ ? this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10) : nullptr;
 
-        pcloud_publisher_ = nullptr;
-        if (publish_pointcloud_)
-        {
-            pcloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10);
-        }
+        pcloud_publisher_ = publish_pointcloud_ ? this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10) : nullptr;
 
         evcloud_publisher_ = publish_events_ ? this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/events", 10) : nullptr;
 
         cam_info_publisher_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("sensor/camera_info", 10);
+
+        imu_publisher_ = publish_imu_ ? this->create_publisher<sensor_msgs::msg::Imu>("imu", 10) : nullptr;
+
         // Initialize & start polling thread
         RCLCPP_INFO_STREAM(this->get_logger(), "Starting publisher thread...");
         frame_polling_thread_ = std::make_shared<std::thread>(std::bind(&VxsSensorPublisher::FramePollingLoop, this));
@@ -396,6 +395,40 @@ namespace vxs_ros
                 if (publish_pointcloud_)
                 {
                     PublishPointcloud(points);
+                }
+            }
+
+            // Check for imu samples
+            if (publish_imu_)
+            {
+                std::vector<imu::IMUSample> imu_samples;
+                int num_samples;
+                vxsdk::vxIMU *sample_ptr = vxsdk::vxGetIMU(num_samples);
+                for (int i = 0; i < num_samples; i++)
+                {
+                    imu_samples.emplace_back(*sample_ptr);
+                    sample_ptr++;
+                }
+                if (num_samples > 0)
+                {
+                    // Check if reference time is initialized. @TODO: It should not jappen because IMU is available only in streaming mode
+                    {
+                        std::unique_lock<std::shared_timed_mutex> lock(ref_time_mutex_);
+                        if (!flag_ref_time_initialized_)
+                        {
+                            const double ref_time_secs = this->get_clock()->now().seconds() - (imu_samples.rbegin()->stamp_seconds - imu_samples[0].stamp_seconds);
+                            const int32_t ref_time_sec_part = static_cast<int32_t>(ref_time_secs);
+                            const int64_t ref_time_nsec_part = static_cast<int64_t>((ref_time_secs - ref_time_sec_part) * 1e9);
+                            ref_time_ = rclcpp::Time(ref_time_sec_part, ref_time_nsec_part);
+                            sensor_ref_time_ = imu_samples[0].stamp_seconds;
+                            flag_ref_time_initialized_ = true;
+                        }
+                    }
+                    // Now publish imu readings
+                    for (int i = 0; i < num_samples; i++)
+                    {
+                        // PublishIMUSample(imu_samples[i]);
+                    }
                 }
             }
         }
@@ -627,6 +660,40 @@ namespace vxs_ros
             ptr += msg->point_step;
         }
         evcloud_publisher_->publish(*msg.get());
+    }
+
+    void VxsSensorPublisher::PublishIMUSample(const imu::IMUSample &sample)
+    {
+        sensor_msgs::msg::Imu imu_msg;
+        // 1. Work out time in seconds
+        const double time_in_secs = ref_time_.seconds() + sample.stamp_seconds - sensor_ref_time_;
+        // 2. Extract integer part of seconds
+        const int32_t second_part = static_cast<int32_t>(time_in_secs);
+        // 3. get the nanosecond part as in64
+        const int64_t nanosecond_part = static_cast<int64_t>((time_in_secs - second_part) * 1e9);
+        imu_msg.header.stamp = rclcpp::Time(second_part, nanosecond_part);
+        imu_msg.header.frame_id = "IMU";
+
+        //@TODO: Find covariance values from IMU manufacturer
+        imu_msg.orientation_covariance = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        imu_msg.angular_velocity_covariance = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        imu_msg.linear_acceleration_covariance = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+
+        // !TODO: Assign calibrated orientation if necessary
+        imu_msg.orientation.x = 0;
+        imu_msg.orientation.y = 0;
+        imu_msg.orientation.z = 0;
+        imu_msg.orientation.w = 1;
+
+        imu_msg.angular_velocity.x = sample.omegaX;
+        imu_msg.angular_velocity.y = sample.omegaY;
+        imu_msg.angular_velocity.z = sample.omegaZ;
+
+        imu_msg.linear_acceleration.x = sample.aX;
+        imu_msg.linear_acceleration.y = sample.aY;
+        imu_msg.linear_acceleration.z = sample.aZ;
+
+        imu_publisher_->publish(imu_msg);
     }
 
 } // end namespace vxs_ros
