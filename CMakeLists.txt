@@ -28,6 +28,8 @@ find_package(sensor_msgs REQUIRED)
 list(APPEND AMENT_DEPENDENCIES sensor_msgs)
 find_package(pcl_conversions REQUIRED)
 list(APPEND AMENT_DEPENDENCIES pcl_conversions)
+find_package(rosidl_default_runtime REQUIRED)
+list(APPEND AMENT_DEPENDENCIES rosidl_default_runtime)
 
 list(APPEND VXS_NODE_INCLUDE_DIRS src)
 
@@ -51,6 +53,13 @@ else()
   message("VXSDK not found!")
 endif()
 
+# Service files
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/UpdateObservationWindow.srv"
+  DEPENDENCIES std_msgs 
+)
+
+
 #PY --------------------------------------------------------------------
 #install python modules
 ament_python_install_package(${PROJECT_NAME})
@@ -68,6 +77,9 @@ set(VXS_NODE_SOURCES
 add_executable(vxs_node ${VXS_NODE_SOURCES})
 ament_target_dependencies(vxs_node ${AMENT_DEPENDENCIES})
 target_link_libraries(vxs_node ${OTHER_LIBS})
+rosidl_target_interfaces(vxs_node
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
 
 SET(VXS_CPP_SUB_SOURCES 
     ${CMAKE_CURRENT_SOURCE_DIR}/src/subscriber/vxs_subscriber.cpp
@@ -104,4 +116,5 @@ install(DIRECTORY "${CONFIG_SRC_DIR}"
 )
 
 ament_export_dependencies(${AMENT_DEPENDENCIES})
+#ament_export_include_directories(include) 
 ament_package()

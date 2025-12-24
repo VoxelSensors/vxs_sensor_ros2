@@ -11,12 +11,13 @@ namespace vxs_ros
     const float FilteringParams::DEFAULT_FILTERP1X = 0.1;
     const float FilteringParams::DEFAULT_FILTERP1Y = 0.1;
 
-    VxsSensorPublisher::VxsSensorPublisher() :                                 //
-                                               Node("vxs_sensor"),             //
-                                               frame_polling_thread_(nullptr), //
-                                               emb_comms_(nullptr),            //
-                                               flag_shutdown_request_(false),  //
-                                               flag_ref_time_initialized_(false)
+    VxsSensorPublisher::VxsSensorPublisher() :                                    //
+                                               Node("vxs_sensor"),                //
+                                               frame_polling_thread_(nullptr),    //
+                                               emb_comms_(nullptr),               //
+                                               flag_shutdown_request_(false),     //
+                                               flag_ref_time_initialized_(false), //
+                                               flag_update_observation_window_(false)
 
     {
         std::string package_share_directory = ament_index_cpp::get_package_share_directory("vxs_sensor_ros2");
@@ -293,6 +294,21 @@ namespace vxs_ros
 
         imu_publisher_ = publish_imu_ ? this->create_publisher<sensor_msgs::msg::Imu>("imu", 10) : nullptr;
 
+        // The observation window service
+        // Create the freeze service
+        update_observation_window_service_ = this->create_service<vxs_sensor_ros2::srv::UpdateObservationWindow>( //
+            "update_observation_window",                                                                          //
+            [this](const std::shared_ptr<vxs_sensor_ros2::srv::UpdateObservationWindow::Request> req,             //
+                   std::shared_ptr<vxs_sensor_ros2::srv::UpdateObservationWindow::Response> res)
+            {
+                //! No boundary checking until values have been confirmed in SDK
+                on_time_ = req->on_time;
+                period_time_ = req->period_time;
+                res->status_message = "vxs_node: Updating observation window...";
+                res->success = true;
+                flag_update_observation_window_ = true;
+            });
+
         // Initialize & start polling thread
         RCLCPP_INFO_STREAM(this->get_logger(), "Starting publisher thread...");
         frame_polling_thread_ = std::make_shared<std::thread>(std::bind(&VxsSensorPublisher::FramePollingLoop, this));
@@ -427,7 +443,7 @@ namespace vxs_ros
                     // Now publish imu readings
                     for (int i = 0; i < num_samples; i++)
                     {
-                        // PublishIMUSample(imu_samples[i]);
+                        PublishIMUSample(imu_samples[i]);
                     }
                 }
             }
