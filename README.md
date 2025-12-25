@@ -167,5 +167,8 @@ or,
 - **temporal_threshold (int)**          : (Filtering arg. 6). Default: 4
 - **spatial_threshold (int)**           : (Filtering arg. 7). Default: 10
 - **median_rejection_threshold (int)**  : (Filtering arg. 8). Default: 5
+- **observation_window_on_time (int)**      : Observation window `on_time` in nanoseconds (e.g., 100)
+- **observation_window_perior_time (int)**  : Observation window `period_time` in nanoseconds. usually double the `on_time` (e.g., 200)
+- **sleep_time_ms (int)**               : Sleep time for the mainloop thread when waiting for data in ms. Default: 1
 
 **NOTE**: If none of the three first arguments that determine sensor communication mode are set, then the node will internally set **publish_pointcloud** to **true**.

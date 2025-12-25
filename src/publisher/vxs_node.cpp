@@ -3,6 +3,7 @@
 
 #include "publisher/vxs_node.hpp"
 #include "common.hpp"
+#include "imu.hpp"
 
 namespace vxs_ros
 {
@@ -14,7 +15,8 @@ namespace vxs_ros
                                                Node("vxs_sensor"),             //
                                                frame_polling_thread_(nullptr), //
                                                emb_comms_(nullptr),            //
-                                               flag_shutdown_request_(false)   //
+                                               flag_shutdown_request_(false),  //
+                                               flag_ref_time_initialized_(false)
 
     {
         std::string package_share_directory = ament_index_cpp::get_package_share_directory("vxs_sensor_ros2");
@@ -24,6 +26,7 @@ namespace vxs_ros
         this->declare_parameter("lookup_table1", rclcpp::PARAMETER_STRING);
         this->declare_parameter("lookup_table2", rclcpp::PARAMETER_STRING);
 
+        this->declare_parameter("publish_imu", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_depth_image", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_pointcloud", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_events", rclcpp::PARAMETER_BOOL);
@@ -38,6 +41,12 @@ namespace vxs_ros
         this->declare_parameter("filterP1Y", rclcpp::PARAMETER_DOUBLE);
         this->declare_parameter("temporal_threshold", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("spatial_threshold", rclcpp::PARAMETER_INTEGER);
+        this->declare_parameter("median_rejection_threshold", rclcpp::PARAMETER_INTEGER);
+
+        this->declare_parameter("observation_window_on_time", rclcpp::PARAMETER_INTEGER);
+        this->declare_parameter("observation_window_period_time", rclcpp::PARAMETER_INTEGER);
+
+        this->declare_parameter("sleep_time_ms", rclcpp::PARAMETER_INTEGER);
 
         // Retrieve params
         // Publish depth image
@@ -231,6 +240,45 @@ namespace vxs_ros
         }
         RCLCPP_INFO_STREAM(this->get_logger(), "Filtering: --- Median rejection threshold: " << filtering_params_.median_rejection_threshold);
 
+        rclcpp::Parameter publish_imu_param;
+        if (!this->get_parameter("publish_imu", publish_imu_param))
+        {
+            publish_imu_ = false;
+        }
+        else
+        {
+            publish_imu_ = publish_imu_param.as_bool();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Publish IMU samples: " << (publish_imu_ ? "YES" : "NO"));
+
+        rclcpp::Parameter observation_window_on_time_param, observation_window_period_time_param;
+        if (this->get_parameter("observation_window_on_time", observation_window_on_time_param))
+        {
+            if (this->get_parameter("observation_window_period_time", observation_window_period_time_param))
+            {
+                on_time_ = observation_window_on_time_param.as_int();
+                period_time_ = observation_window_period_time_param.as_int();
+                flag_update_observation_window_ = true;
+                RCLCPP_INFO_STREAM(this->get_logger(), "Observation window SET(on_time, period_time) = (" << on_time_ << ", " << period_time_ << ").");
+            }
+        }
+        else
+        {
+            flag_update_observation_window_ = false;
+            RCLCPP_INFO_STREAM(this->get_logger(), "Observation window set to DEFAULT. ");
+        }
+
+        rclcpp::Parameter sleep_time_ms_param;
+        if (!this->get_parameter("sleep_time_ms", sleep_time_ms_param))
+        {
+            sleep_time_ms_ = 1;
+        }
+        else
+        {
+            sleep_time_ms_ = sleep_time_ms_param.as_int();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Thread sleep time set to " << sleep_time_ms_ << "ms.");
+
         // Do some logic to resolve conflicting flags regarding frame-based and/or event/streaming/timestamped mode
         if (publish_events_)
         {
@@ -248,13 +296,12 @@ namespace vxs_ros
             }
             RCLCPP_INFO_STREAM(this->get_logger(), "Pointcloud publisher: " << (publish_pointcloud_ ? "ENABLED." : "DISABLED."));
             RCLCPP_INFO_STREAM(this->get_logger(), "Depth image publisher: " << (publish_depth_image_ ? "ENABLED." : "DISABLED."));
-            /*
+
             if (publish_imu_)
             {
                 publish_imu_ = false;
                 RCLCPP_INFO_STREAM(this->get_logger(), "IMU sample will **NOT** be published in frame mode... ");
             }
-            */
         }
 
         // Load calibration into members
@@ -269,21 +316,31 @@ namespace vxs_ros
         RCLCPP_INFO_STREAM(this->get_logger(), "Done.");
 
         // Create publishers
-        depth_publisher_ = nullptr;
-        if (publish_depth_image_)
-        {
-            depth_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10);
-        }
+        depth_publisher_ = publish_depth_image_ ? this->create_publisher<sensor_msgs::msg::Image>("depth/image", 10) : nullptr;
 
-        pcloud_publisher_ = nullptr;
-        if (publish_pointcloud_)
-        {
-            pcloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10);
-        }
+        pcloud_publisher_ = publish_pointcloud_ ? this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/cloud", 10) : nullptr;
 
         evcloud_publisher_ = publish_events_ ? this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/events", 10) : nullptr;
 
         cam_info_publisher_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("sensor/camera_info", 10);
+
+        imu_publisher_ = publish_imu_ ? this->create_publisher<sensor_msgs::msg::Imu>("imu", 10) : nullptr;
+
+        // The observation window service
+        // Create the freeze service
+        update_observation_window_service_ = this->create_service<vxs_sensor_ros2::srv::UpdateObservationWindow>( //
+            "update_observation_window",                                                                          //
+            [this](const std::shared_ptr<vxs_sensor_ros2::srv::UpdateObservationWindow::Request> req,             //
+                   std::shared_ptr<vxs_sensor_ros2::srv::UpdateObservationWindow::Response> res)
+            {
+                //! No boundary checking until values have been confirmed in SDK
+                on_time_ = req->on_time;
+                period_time_ = req->period_time;
+                res->status_message = "vxs_node: Updating observation window...";
+                res->success = true;
+                flag_update_observation_window_ = true;
+            });
+
         // Initialize & start polling thread
         RCLCPP_INFO_STREAM(this->get_logger(), "Starting publisher thread...");
         frame_polling_thread_ = std::make_shared<std::thread>(std::bind(&VxsSensorPublisher::FramePollingLoop, this));
@@ -362,6 +419,7 @@ namespace vxs_ros
             // Wait until data ready
             while (!vxsdk::vxCheckForData())
             {
+                std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time_ms_));
             }
             if (publish_events_) // streaming based publishing
             {
@@ -387,6 +445,46 @@ namespace vxs_ros
                 {
                     PublishPointcloud(points);
                 }
+            }
+
+            // Check for imu samples
+            if (publish_imu_)
+            {
+                std::vector<imu::IMUSample> imu_samples;
+                int num_samples;
+                vxsdk::vxIMU *sample_ptr = vxsdk::vxGetIMU(num_samples);
+                for (int i = 0; i < num_samples; i++)
+                {
+                    imu_samples.emplace_back(*sample_ptr);
+                    sample_ptr++;
+                }
+                if (num_samples > 0)
+                {
+                    // Check if reference time is initialized. @TODO: It should not jappen because IMU is available only in streaming mode
+                    {
+                        std::unique_lock<std::shared_timed_mutex> lock(ref_time_mutex_);
+                        if (!flag_ref_time_initialized_)
+                        {
+                            const double ref_time_secs = this->get_clock()->now().seconds() - (imu_samples.rbegin()->stamp_seconds - imu_samples[0].stamp_seconds);
+                            const int32_t ref_time_sec_part = static_cast<int32_t>(ref_time_secs);
+                            const int64_t ref_time_nsec_part = static_cast<int64_t>((ref_time_secs - ref_time_sec_part) * 1e9);
+                            ref_time_ = rclcpp::Time(ref_time_sec_part, ref_time_nsec_part);
+                            sensor_ref_time_ = imu_samples[0].stamp_seconds;
+                            flag_ref_time_initialized_ = true;
+                        }
+                    }
+                    // Now publish imu readings
+                    for (int i = 0; i < num_samples; i++)
+                    {
+                        PublishIMUSample(imu_samples[i]);
+                    }
+                }
+            }
+            // Check for observation window update
+            if (flag_update_observation_window_)
+            {
+                vxsdk::vxSetObservationWindow(on_time_, period_time_);
+                flag_update_observation_window_ = false;
             }
         }
         flag_in_polling_loop_ = false;
@@ -617,6 +715,40 @@ namespace vxs_ros
             ptr += msg->point_step;
         }
         evcloud_publisher_->publish(*msg.get());
+    }
+
+    void VxsSensorPublisher::PublishIMUSample(const imu::IMUSample &sample)
+    {
+        sensor_msgs::msg::Imu imu_msg;
+        // 1. Work out time in seconds
+        const double time_in_secs = ref_time_.seconds() + sample.stamp_seconds - sensor_ref_time_;
+        // 2. Extract integer part of seconds
+        const int32_t second_part = static_cast<int32_t>(time_in_secs);
+        // 3. get the nanosecond part as in64
+        const int64_t nanosecond_part = static_cast<int64_t>((time_in_secs - second_part) * 1e9);
+        imu_msg.header.stamp = rclcpp::Time(second_part, nanosecond_part);
+        imu_msg.header.frame_id = "IMU";
+
+        //@TODO: Find covariance values from IMU manufacturer
+        imu_msg.orientation_covariance = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        imu_msg.angular_velocity_covariance = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        imu_msg.linear_acceleration_covariance = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+
+        // !TODO: Assign calibrated orientation if necessary
+        imu_msg.orientation.x = 0;
+        imu_msg.orientation.y = 0;
+        imu_msg.orientation.z = 0;
+        imu_msg.orientation.w = 1;
+
+        imu_msg.angular_velocity.x = sample.omegaX;
+        imu_msg.angular_velocity.y = sample.omegaY;
+        imu_msg.angular_velocity.z = sample.omegaZ;
+
+        imu_msg.linear_acceleration.x = sample.aX;
+        imu_msg.linear_acceleration.y = sample.aY;
+        imu_msg.linear_acceleration.z = sample.aZ;
+
+        imu_publisher_->publish(imu_msg);
     }
 
 } // end namespace vxs_ros
