@@ -11,13 +11,12 @@ namespace vxs_ros
     const float FilteringParams::DEFAULT_FILTERP1X = 0.1;
     const float FilteringParams::DEFAULT_FILTERP1Y = 0.1;
 
-    VxsSensorPublisher::VxsSensorPublisher() :                                    //
-                                               Node("vxs_sensor"),                //
-                                               frame_polling_thread_(nullptr),    //
-                                               emb_comms_(nullptr),               //
-                                               flag_shutdown_request_(false),     //
-                                               flag_ref_time_initialized_(false), //
-                                               flag_update_observation_window_(false)
+    VxsSensorPublisher::VxsSensorPublisher() :                                 //
+                                               Node("vxs_sensor"),             //
+                                               frame_polling_thread_(nullptr), //
+                                               emb_comms_(nullptr),            //
+                                               flag_shutdown_request_(false),  //
+                                               flag_ref_time_initialized_(false)
 
     {
         std::string package_share_directory = ament_index_cpp::get_package_share_directory("vxs_sensor_ros2");
@@ -43,6 +42,11 @@ namespace vxs_ros
         this->declare_parameter("temporal_threshold", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("spatial_threshold", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("median_rejection_threshold", rclcpp::PARAMETER_INTEGER);
+
+        this->declare_parameter("observation_window_on_time", rclcpp::PARAMETER_INTEGER);
+        this->declare_parameter("observation_window_period_time", rclcpp::PARAMETER_INTEGER);
+
+        this->declare_parameter("sleep_time_ms", rclcpp::PARAMETER_INTEGER);
 
         // Retrieve params
         // Publish depth image
@@ -247,6 +251,34 @@ namespace vxs_ros
         }
         RCLCPP_INFO_STREAM(this->get_logger(), "Publish IMU samples: " << (publish_imu_ ? "YES" : "NO"));
 
+        rclcpp::Parameter observation_window_on_time_param, observation_window_period_time_param;
+        if (this->get_parameter("observation_window_on_time", observation_window_on_time_param))
+        {
+            if (this->get_parameter("observation_window_period_time", observation_window_period_time_param))
+            {
+                on_time_ = observation_window_on_time_param.as_int();
+                period_time_ = observation_window_period_time_param.as_int();
+                flag_update_observation_window_ = true;
+                RCLCPP_INFO_STREAM(this->get_logger(), "Observation window SET(on_time, period_time) = (" << on_time_ << ", " << period_time_ << ").");
+            }
+        }
+        else
+        {
+            flag_update_observation_window_ = false;
+            RCLCPP_INFO_STREAM(this->get_logger(), "Observation window set to DEFAULT. ");
+        }
+
+        rclcpp::Parameter sleep_time_ms_param;
+        if (!this->get_parameter("sleep_time_ms", sleep_time_ms_param))
+        {
+            sleep_time_ms_ = 1;
+        }
+        else
+        {
+            sleep_time_ms_ = sleep_time_ms_param.as_int();
+        }
+        RCLCPP_INFO_STREAM(this->get_logger(), "Thread sleep time set to " << sleep_time_ms_ << "ms.");
+
         // Do some logic to resolve conflicting flags regarding frame-based and/or event/streaming/timestamped mode
         if (publish_events_)
         {
@@ -387,6 +419,7 @@ namespace vxs_ros
             // Wait until data ready
             while (!vxsdk::vxCheckForData())
             {
+                std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time_ms_));
             }
             if (publish_events_) // streaming based publishing
             {
@@ -446,6 +479,12 @@ namespace vxs_ros
                         PublishIMUSample(imu_samples[i]);
                     }
                 }
+            }
+            // Check for observation window update
+            if (flag_update_observation_window_)
+            {
+                vxsdk::vxSetObservationWindow(on_time_, period_time_);
+                flag_update_observation_window_ = false;
             }
         }
         flag_in_polling_loop_ = false;
