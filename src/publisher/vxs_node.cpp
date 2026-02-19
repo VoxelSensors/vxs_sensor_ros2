@@ -143,7 +143,7 @@ namespace vxs_ros
         rclcpp::Parameter calib_json_param;
         if (!this->get_parameter("calib_json", calib_json_param))
         {
-            calib_json_ = "config/default_calib.json";
+            calib_json_ = "config/and2_106.json";
             RCLCPP_INFO_STREAM(this->get_logger(), "Calibration JSON not specified. Using default: " << calib_json_);
         }
         else
@@ -434,7 +434,6 @@ namespace vxs_ros
                 counter++;
                 // Extract frame
                 std::vector<cv::Vec3f> points;
-
                 cv::Mat frame = UnpackFrameSensorData(frameXYZ, points);
                 //   Publish sensor data as a depth image
                 if (publish_depth_image_)
@@ -505,8 +504,10 @@ namespace vxs_ros
             for (size_t c = 0; c < SENSOR_WIDTH; c++)
             {
                 const float &Z = frameXYZ[(r * SENSOR_WIDTH + c) * 3 + 2];
+
                 if (Z > 1e-5)
                 {
+
                     const float &X = frameXYZ[(r * SENSOR_WIDTH + c) * 3];
                     const float &Y = frameXYZ[(r * SENSOR_WIDTH + c) * 3 + 1];
 
@@ -652,9 +653,9 @@ namespace vxs_ros
         for (size_t i = 0; i < msg->width; ++i)
         {
             float *point = reinterpret_cast<float *>(ptr);
-            point[0] = points[i][0] / 1000.0f; // X coordinate
-            point[1] = points[i][1] / 1000.0f; // Y coordinate
-            point[2] = points[i][2] / 1000.0f; // Z coordinate
+            point[0] = points[i][0] / 1000.0f;  // X coordinate
+            point[1] = points[i][1] / 1000.0f;  // Y coordinate
+            point[2] = -points[i][2] / 1000.0f; // Z coordinate
             ptr += msg->point_step;
         }
         pcloud_publisher_->publish(*msg.get());
@@ -708,9 +709,9 @@ namespace vxs_ros
         for (size_t i = 0; i < msg->width; ++i)
         {
             float *point = reinterpret_cast<float *>(ptr);
-            point[0] = eventsXYZT[i].x / 1000.0f; // X coordinate
-            point[1] = eventsXYZT[i].y / 1000.0f; // Y coordinate
-            point[2] = eventsXYZT[i].z / 1000.0f; // Z coordinate
+            point[0] = eventsXYZT[i].x / 1000.0f;  // X coordinate
+            point[1] = eventsXYZT[i].y / 1000.0f;  // Y coordinate
+            point[2] = -eventsXYZT[i].z / 1000.0f; // Z coordinate
             *(double *)(ptr + t.offset) = *(double *)&(eventsXYZT[i].timestamp);
             ptr += msg->point_step;
         }

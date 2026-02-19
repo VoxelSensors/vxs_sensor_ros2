@@ -77,46 +77,90 @@ namespace vxs_ros
         }
     }
 
+    // void VxsSensorSubscriber::PointcloudCB(const sensor_msgs::msg::PointCloud2::SharedPtr pcl_msg)
+    // {
+    //     std::vector<cv::Vec3f> points;
+    //     // const uint32_t row_step = pcl_msg->row_step;
+
+    //     const uint32_t width = pcl_msg->width;
+    //     const uint32_t height = pcl_msg->height;
+    //     uint8_t *data_ptr = &pcl_msg->data[0];
+
+    //     sensor_msgs::msg::PointField x_field = pcl_msg->fields[0];
+    //     sensor_msgs::msg::PointField y_field = pcl_msg->fields[1];
+    //     sensor_msgs::msg::PointField z_field = pcl_msg->fields[2];
+    //     // Point field datatypes. Pointrcloud can be either FLOAT32 or FLOAT64
+    //     // uint8 FLOAT32 = 7
+    //     // uint8 FLOAT64 = 8
+    //     const uint32_t field1_size = (x_field.datatype == 7 ? sizeof(float) : sizeof(double));
+    //     const uint32_t field2_size = (y_field.datatype == 7 ? sizeof(float) : sizeof(double));
+    //     const uint32_t field3_size = (z_field.datatype == 7 ? sizeof(float) : sizeof(double));
+    //     const uint32_t size_of_fields = field1_size + field2_size + field3_size;
+
+    //     for (size_t r = 0; r < height; r++)
+    //     {
+    //         for (size_t c = 0; c < width; c++)
+    //         {
+    //             const double x = x_field.datatype == 7 ? *(float *)(data_ptr + x_field.offset) : *(double *)(data_ptr + x_field.offset);
+    //             const double y = y_field.datatype == 7 ? *(float *)(data_ptr + y_field.offset) : *(double *)(data_ptr + y_field.offset);
+    //             const double z = z_field.datatype == 7 ? *(float *)(data_ptr + z_field.offset) : *(double *)(data_ptr + z_field.offset);
+
+    //             if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
+    //             {
+    //                 points.emplace_back(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+    //                 RCLCPP_INFO_STREAM(this->get_logger(), "Point: (" << x << ", " << y << ", " << z << ")");
+    //             }
+    //             else
+    //             {
+    //                 RCLCPP_ERROR(this->get_logger(), "Invalid point read!");
+    //             }
+    //             data_ptr += size_of_fields;
+    //         }
+    //     }
+    // }
+
     void VxsSensorSubscriber::PointcloudCB(const sensor_msgs::msg::PointCloud2::SharedPtr pcl_msg)
     {
-        std::vector<cv::Vec3f> points;
-        // const uint32_t row_step = pcl_msg->row_step;
+        // 1. Calculate the total number of points in this message
+        // Since it's unorganized, height is 1 and width is N.
+        const uint32_t num_points = pcl_msg->width * pcl_msg->height;
 
-        const uint32_t width = pcl_msg->width;
-        const uint32_t height = pcl_msg->height;
-        uint8_t *data_ptr = &pcl_msg->data[0];
+        // 2. Point to the beginning of the data buffer
+        const uint8_t *data_ptr = pcl_msg->data.data();
 
-        sensor_msgs::msg::PointField x_field = pcl_msg->fields[0];
-        sensor_msgs::msg::PointField y_field = pcl_msg->fields[1];
-        sensor_msgs::msg::PointField z_field = pcl_msg->fields[2];
-        // Point field datatypes. Pointrcloud can be either FLOAT32 or FLOAT64
-        // uint8 FLOAT32 = 7
-        // uint8 FLOAT64 = 8
-        const uint32_t field1_size = (x_field.datatype == 7 ? sizeof(float) : sizeof(double));
-        const uint32_t field2_size = (y_field.datatype == 7 ? sizeof(float) : sizeof(double));
-        const uint32_t field3_size = (z_field.datatype == 7 ? sizeof(float) : sizeof(double));
-        const uint32_t size_of_fields = field1_size + field2_size + field3_size;
+        // 3. Extract the metadata from the message fields
+        // This makes your code "blind" to changes—it just follows the message instructions.
+        const uint32_t x_offset = pcl_msg->fields[0].offset;
+        const uint32_t y_offset = pcl_msg->fields[1].offset;
+        const uint32_t z_offset = pcl_msg->fields[2].offset;
+        const uint32_t point_step = pcl_msg->point_step; // The jump size (usually 12 or 16)
 
-        for (size_t r = 0; r < height; r++)
+        int valid_count = 0;
+
+        for (size_t i = 0; i < num_points; ++i)
         {
-            for (size_t c = 0; c < width; c++)
-            {
-                const double x = x_field.datatype == 7 ? *(float *)(data_ptr + x_field.offset) : *(double *)(data_ptr + x_field.offset);
-                const double y = y_field.datatype == 7 ? *(float *)(data_ptr + y_field.offset) : *(double *)(data_ptr + y_field.offset);
-                const double z = z_field.datatype == 7 ? *(float *)(data_ptr + z_field.offset) : *(double *)(data_ptr + z_field.offset);
+            // Use the offsets to find exactly where x, y, and z are inside this specific point
+            float x = *reinterpret_cast<const float *>(data_ptr + x_offset);
+            float y = *reinterpret_cast<const float *>(data_ptr + y_offset);
+            float z = *reinterpret_cast<const float *>(data_ptr + z_offset);
 
-                if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
+            // Standard ROS check for sensor noise/empty pixels
+            if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
+            {
+                valid_count++;
+
+                // LOGGING: Don't print 10,000 lines. Just print the first one for sanity.
+                if (valid_count == 1)
                 {
-                    points.emplace_back(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
-                    RCLCPP_INFO_STREAM(this->get_logger(), "Point: (" << x << ", " << y << ", " << z << ")");
+                    RCLCPP_INFO(this->get_logger(), "Sample Point: x=%.3f, y=%.3f, z=%.3f (meters)", x, y, z);
                 }
-                else
-                {
-                    RCLCPP_ERROR(this->get_logger(), "Invalid point read!");
-                }
-                data_ptr += size_of_fields;
             }
+
+            // Jump the pointer to the next point in the buffer
+            data_ptr += point_step;
         }
+
+        RCLCPP_INFO(this->get_logger(), "Received %d points (%d valid hits)", num_points, valid_count);
     }
 
     void VxsSensorSubscriber::StampedPointcloudCB(const sensor_msgs::msg::PointCloud2::SharedPtr pcl_msg)

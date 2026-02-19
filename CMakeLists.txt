@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.5)
 project(vxs_sensor_ros2)
 
@@ -30,6 +29,10 @@ find_package(pcl_conversions REQUIRED)
 list(APPEND AMENT_DEPENDENCIES pcl_conversions)
 find_package(rosidl_default_runtime REQUIRED)
 list(APPEND AMENT_DEPENDENCIES rosidl_default_runtime)
+
+# --- ADDED: Needed for the avoidance arrows ---
+find_package(visualization_msgs REQUIRED)
+list(APPEND AMENT_DEPENDENCIES visualization_msgs)
 
 list(APPEND VXS_NODE_INCLUDE_DIRS src)
 
@@ -91,9 +94,22 @@ ament_target_dependencies(vxs_cpp_subscriber ${AMENT_DEPENDENCIES})
 target_link_libraries(vxs_cpp_subscriber ${OTHER_LIBS})
 
 
+
+set(AVOIDER_SOURCES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/obstacle_avoider/obstacle_avoider.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/obstacle_avoider/obstacle_avoider_main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/obstacle_avoider/obstacle_avoider.hpp)
+
+add_executable(obstacle_avoider ${AVOIDER_SOURCES})
+
+ament_target_dependencies(obstacle_avoider ${AMENT_DEPENDENCIES})
+
+
+
 install(TARGETS
   vxs_node
   vxs_cpp_subscriber
+  obstacle_avoider  
   DESTINATION lib/${PROJECT_NAME})
 
 #install python executables

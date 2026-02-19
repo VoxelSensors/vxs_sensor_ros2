@@ -1,0 +1,36 @@
+
+cd vxs_ws/ros_ws/src/vxs_sensor_ros2/docker
+./run_no_gpu.sh terzakig/vxsros:amd_no_gpu 
+sudo apt install libnanoflann-dev
+
+
+Terminal1:
+cd vxs_ws/ros_ws
+ros2 run vxs_sensor_ros2 vxs_node --ros-args \
+  -p "config_json:=/home/vxs/vxs_ws/ros_ws/src/vxs_sensor_ros2/config/and2_median_golden.json" \
+  -p "calib_json:=/home/vxs/vxs_ws/ros_ws/src/vxs_sensor_ros2/config/default_calib.json" \
+  -p "fps:=20" \
+  -p "publish_events:=true" \
+  -p "publish_depth_image:=false" \
+  -p "publish_pointcloud:=false" \
+  -p "observation_window_on_time:=40" \
+  -p "observation_window_period_time:=200"
+
+
+
+Terminal2:
+cd vxs_ws/ros_ws
+ros2 run vxs_sensor_ros2 vxs_cpp_subscriber OR rviz2
+
+
+Terminal3:
+cd vxs_ws/ros_ws
+ros2 run tf2_ros static_transform_publisher "0" "0" "0" "0" "0" "0" "map" "sensor"
+
+
+Terminal4:
+ros2 bag record -o lab_dynamic_obs /pcloud/cloud /tf_static /tf
+ros2 bag play bag_folder_name
+
+
+
