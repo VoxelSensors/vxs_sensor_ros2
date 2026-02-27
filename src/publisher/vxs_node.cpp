@@ -425,6 +425,7 @@ namespace vxs_ros
             {
                 int N;
                 vxsdk::vxXYZT *eventsXYZT = vxsdk::vxGetXYZT(N);
+
                 PublishStampedPointcloud(N, eventsXYZT);
             }
             else // Frame based data

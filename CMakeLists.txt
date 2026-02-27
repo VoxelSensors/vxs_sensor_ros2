@@ -25,6 +25,8 @@ find_package(std_msgs REQUIRED)
 list(APPEND AMENT_DEPENDENCIES std_msgs)
 find_package(sensor_msgs REQUIRED)
 list(APPEND AMENT_DEPENDENCIES sensor_msgs)
+find_package(geometry_msgs REQUIRED)
+list(APPEND AMENT_DEPENDENCIES geometry_msgs)
 find_package(pcl_conversions REQUIRED)
 list(APPEND AMENT_DEPENDENCIES pcl_conversions)
 find_package(rosidl_default_runtime REQUIRED)
@@ -105,11 +107,22 @@ add_executable(obstacle_avoider ${AVOIDER_SOURCES})
 ament_target_dependencies(obstacle_avoider ${AMENT_DEPENDENCIES})
 
 
+set(AVOIDER_SOURCES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/safety_driver/safety_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/safety_driver/safety_driver_main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/safety_driver/safety_driver.hpp)
+
+
+add_executable(safety_driver ${AVOIDER_SOURCES})
+target_link_libraries(safety_driver ${OTHER_LIBS})
+ament_target_dependencies(safety_driver ${AMENT_DEPENDENCIES})
+
 
 install(TARGETS
   vxs_node
   vxs_cpp_subscriber
   obstacle_avoider  
+  safety_driver
   DESTINATION lib/${PROJECT_NAME})
 
 #install python executables

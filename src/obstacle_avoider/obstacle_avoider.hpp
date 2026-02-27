@@ -1,3 +1,12 @@
+/**
+ * @file obstacle_avoider.hpp
+ * @author Nathan Nascimento (nathan.nascimento@voxelsensors.com)
+ * @brief Simple artificial potential field avoidance
+ *
+ * @copyright Copyright (c) 2026
+ *
+ */
+
 #ifndef OBSTACLE_AVOIDER_HPP_
 #define OBSTACLE_AVOIDER_HPP_
 
