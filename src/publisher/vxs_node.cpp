@@ -710,9 +710,9 @@ namespace vxs_ros
         for (size_t i = 0; i < msg->width; ++i)
         {
             float *point = reinterpret_cast<float *>(ptr);
-            point[0] = eventsXYZT[i].x / 1000.0f;  // X coordinate
-            point[1] = eventsXYZT[i].y / 1000.0f;  // Y coordinate
-            point[2] = -eventsXYZT[i].z / 1000.0f; // Z coordinate
+            point[0] = eventsXYZT[i].x * 0.001f; // X coordinate
+            point[1] = eventsXYZT[i].y * 0.001f; // Y coordinate
+            point[2] = eventsXYZT[i].z * 0.001f; // Z coordinate
             *(double *)(ptr + t.offset) = *(double *)&(eventsXYZT[i].timestamp);
             ptr += msg->point_step;
         }
