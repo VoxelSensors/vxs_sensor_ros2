@@ -127,7 +127,7 @@ install(TARGETS
 
 #install python executables
 install(PROGRAMS
-  scripts/vxs_py_subscriber.py
+  py_src/scripts/vxs_py_subscriber.py
   DESTINATION lib/${PROJECT_NAME})
 
 if (NOT DEFINED ENV{USERNAME})

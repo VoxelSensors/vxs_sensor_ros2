@@ -73,6 +73,13 @@ namespace vxs_ros
         void FramePollingLoop();
         void ProcessAndPublish(const int N, vxsdk::vxXYZT *eventsXYZT);
 
+        float x_min_;
+        float x_max_;
+        float y_min_;
+        float y_max_;
+        float z_min_;
+        float z_max_;
+
         // Your requested standalone debug function
         void PrintDebugPoints(const int N, vxsdk::vxXYZT *eventsXYZT);
     };

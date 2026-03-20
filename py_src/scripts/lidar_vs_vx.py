@@ -71,7 +71,7 @@ def calculate_lyra_hits(distance_m,
     return pts_per_sec
 
 
-distances = [0.5, 1.0, 3.0, 5.0]
+distances = [0.5, 1.0, 2.0, 3.0]
 widths_cm = [0.75, 1.5]
 
 print(f"{'Distance (m)':<15} | {'Width (cm)':<12} | {'Lyra (pts/s)':<15} | {'360-LiDAR (pts/s)':<15}")

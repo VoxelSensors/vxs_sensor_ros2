@@ -20,6 +20,14 @@ namespace vxs_ros
         this->declare_parameter("observation_window_on_time", 40);
         this->declare_parameter("observation_window_period_time", 200);
 
+        // Declare the dynamic bounding box (using your current hardcoded values as defaults)
+        this->declare_parameter("x_min", -10.0);
+        this->declare_parameter("x_max", 10.0);
+        this->declare_parameter("y_min", -20000.0);
+        this->declare_parameter("y_max", 20000.0);
+        this->declare_parameter("z_min", -10000.0);
+        this->declare_parameter("z_max", 10000.0);
+
         this->declare_parameter("binning_amount", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("prefiltering_threshold", rclcpp::PARAMETER_DOUBLE);
         this->declare_parameter("postfiltering_threshold", rclcpp::PARAMETER_INTEGER);
@@ -31,6 +39,14 @@ namespace vxs_ros
         publish_events_ = this->get_parameter("publish_events").as_bool();
         on_time_ = this->get_parameter("observation_window_on_time").as_int();
         period_time_ = this->get_parameter("observation_window_period_time").as_int();
+
+        // Fetch the bounding box limits (ROS 2 uses doubles for floating point parameters)
+        x_min_ = static_cast<float>(this->get_parameter("x_min").as_double());
+        x_max_ = static_cast<float>(this->get_parameter("x_max").as_double());
+        y_min_ = static_cast<float>(this->get_parameter("y_min").as_double());
+        y_max_ = static_cast<float>(this->get_parameter("y_max").as_double());
+        z_min_ = static_cast<float>(this->get_parameter("z_min").as_double());
+        z_max_ = static_cast<float>(this->get_parameter("z_max").as_double());
 
         rclcpp::Parameter binning_amount_param;
         if (!this->get_parameter("binning_amount", binning_amount_param))
@@ -76,7 +92,8 @@ namespace vxs_ros
         if (publish_events_)
         {
             evcloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("pcloud/events", 10);
-            RCLCPP_INFO(this->get_logger(), "Event pointcloud publishing is ENABLED.");
+            RCLCPP_INFO(this->get_logger(), "Event pointcloud publishing is ENABLED. Box: X(%.1f to %.1f) Y(%.1f to %.1f) Z(%.1f to %.1f)",
+                        x_min_, x_max_, y_min_, y_max_, z_min_, z_max_);
         }
 
         RCLCPP_INFO(this->get_logger(), "Starting Safety Driver Thread...");
@@ -121,9 +138,6 @@ namespace vxs_ros
 
             if (N > 0)
             {
-                // Print the raw signs to the terminal safely
-                // PrintDebugPoints(N, eventsXYZT);
-
                 ProcessAndPublish(N, eventsXYZT);
             }
         }
@@ -131,7 +145,6 @@ namespace vxs_ros
 
     void VxsSafetyDriver::PrintDebugPoints(const int N, vxsdk::vxXYZT *eventsXYZT)
     {
-        // Only run this once per second
         static int frame_counter = 0;
         if (frame_counter++ % 20 != 0 || N <= 0)
             return;
@@ -151,7 +164,7 @@ namespace vxs_ros
     void VxsSafetyDriver::ProcessAndPublish(const int N, vxsdk::vxXYZT *eventsXYZT)
     {
         int danger_points = 0;
-        const int PANIC_THRESHOLD = 50;
+        const int PANIC_THRESHOLD = 5;
         bool reflex_fired = false;
 
         std::vector<int> danger_indices;
@@ -162,10 +175,10 @@ namespace vxs_ros
 
         for (int i = 0; i < N; ++i)
         {
-            // Note: I left the signs exactly as they were. Use the print function to verify them!
-            if (eventsXYZT[i].z > -300.0f && eventsXYZT[i].z < -100.0f &&
-                eventsXYZT[i].x > -200.0f && eventsXYZT[i].x < 200.0f &&
-                eventsXYZT[i].y > -200.0f && eventsXYZT[i].y < 200.0f)
+            // Fully dynamic Kill Zone!
+            if (eventsXYZT[i].z > z_min_ && eventsXYZT[i].z < z_max_ &&
+                eventsXYZT[i].x > x_min_ && eventsXYZT[i].x < x_max_ &&
+                eventsXYZT[i].y > y_min_ && eventsXYZT[i].y < y_max_)
             {
                 danger_points++;
 
@@ -183,7 +196,6 @@ namespace vxs_ros
                 reflex_cmd.linear.z = 0.0;
                 reflex_pub_->publish(reflex_cmd);
 
-                // RCLCPP_WARN(this->get_logger(), "REFLEX: Obstacle Detected! Braking!");
                 reflex_fired = true;
 
                 if (!publish_events_)
@@ -235,7 +247,7 @@ namespace vxs_ros
                 float *point = reinterpret_cast<float *>(ptr);
                 point[0] = eventsXYZT[idx].x * 0.001f;
                 point[1] = eventsXYZT[idx].y * 0.001f;
-                point[2] = -eventsXYZT[idx].z * 0.001f;
+                point[2] = eventsXYZT[idx].z * 0.001f;
                 *(double *)(ptr + 12) = eventsXYZT[idx].timestamp;
                 ptr += msg->point_step;
             }

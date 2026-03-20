@@ -43,9 +43,9 @@ class pointsCounter(Node):
         # printed_first_point = False
         
         for x, y, z in points:
-        #     if not printed_first_point:
-        #         self.get_logger().info(f"First point in frame -> X: {x:.3f}, Y: {y:.3f}, Z: {z:.3f}")
-        #         printed_first_point = True
+            # if not printed_first_point:
+            #     self.get_logger().info(f"First point in frame -> X: {x:.3f}, Y: {y:.3f}, Z: {z:.3f}")
+            #     printed_first_point = True
 
             # 2. Use the dynamically loaded parameters instead of hardcoded numbers
             if (self.x_min < x < self.x_max) and \
@@ -69,3 +69,4 @@ if __name__ == '__main__':
 
 
 # python3 points_counter_node.py --ros-args -p x_min:=-0.5 -p x_max:=0.5 -p z_min:=-0.8 -p z_max:=-0.2
+# python3 points_counter_node.py --ros-args -p x_min:=-100.0 -p x_max:=100.0     -p y_min:=-0.2 -p y_max:=0.3     -p z_min:=0.9 -p z_max:=1.1

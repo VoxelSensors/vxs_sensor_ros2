@@ -64,6 +64,7 @@ docker run -it --privileged --env="DISPLAY" \
   --volume="/sys:/sys" \
   --volume="/tmp:/tmp" \
   --volume="/home/$USER/.config:/home/vxs/.config" \
+  --volume="/home/$USER/.local:/home/vxs/.local" \
   --volume="/home/$USER/.ssh:/home/vxs/.ssh" \
   --volume="/home/$USER/.ccache:/home/vxs/.ccache" \
   --volume="/home/$USER/.bash_aliases:/home/vxs/.bash_aliases" \
