@@ -42,7 +42,7 @@ source install/setup.bash
 
 ---
 
-## 📁 Repository Architecture & Data Sandbox
+## Repository Architecture & Data Sandbox
 
 This repository uses a clean volume-mapping architecture:
 * **Code:** Edit Python/C++ files on your host machine. The Docker container sees the changes instantly, and any "build artifacts" (`build/`, `install/`) are trapped inside the container.
@@ -50,7 +50,7 @@ This repository uses a clean volume-mapping architecture:
 
 ---
 
-## 🏃 Running the Node
+## Running the Node
 
 To run the `vxs_node`, connect the sensor to your PC. 
 
