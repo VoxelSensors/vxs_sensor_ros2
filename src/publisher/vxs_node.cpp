@@ -378,15 +378,15 @@ namespace vxs_ros
         RCLCPP_INFO_STREAM(this->get_logger(), "Initializing standard SDK comms.");
 
         // Set the frame rate (or time window)
-        vxsdk::pipelineType pipeline_type;
+        // vxsdk::pipelineType pipeline_type;
         if (publish_events_)
         {
-            pipeline_type = vxsdk::pipelineType::all; // Get everything out XYT-XYT pairs and XYZT
+            // pipeline_type = vxsdk::pipelineType::all; // Get everything out XYT-XYT pairs and XYZT
             vxsdk::vxSetStreamingDuration(period_);
         }
         else
         {
-            pipeline_type = vxsdk::pipelineType::fbPointcloud;
+            // pipeline_type = vxsdk::pipelineType::fbPointcloud;
             vxsdk::vxSetFPS(fps_);
         }
 
@@ -402,10 +402,10 @@ namespace vxs_ros
             filtering_params_.spatial_threshold);
 
         // Start the SDK Engine.
-        int cam_num = vxsdk::vxStartSystem( //
-            config_json_.c_str(),           //
-            calib_json_.c_str(),            //
-            pipeline_type);
+        int cam_num = vxsdk::vxStartSystem(
+            config_json_.c_str(),
+            calib_json_.c_str(),
+            vxsdk::vxFlag::XYZT);
 
         return cam_num > 0;
     }

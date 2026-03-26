@@ -12,7 +12,7 @@ class VoxelDecimatorNode(Node):
         
         # 1. Declare the resolution of your grid
         # 0.05 means 5 cm cubes. You can change this on the fly!
-        self.declare_parameter('voxel_size', 0.05)
+        self.declare_parameter('voxel_size', 0.02)
         
         # 2. Setup Publisher and Subscriber
         self.subscription = self.create_subscription(

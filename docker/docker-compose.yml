@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  vxs_env:
+    build: .
+    image: vxs_research_image:latest
+    container_name: vxs_container
+    
+    network_mode: "host"
+    privileged: true
+    
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev:/dev:rw
+      # The Code
+      - ../:/home/vxs/ros2_ws/src/vxs_sensor_ros2:rw
+      # The Data Sandbox
+      - ../bags:/home/vxs/bags:rw
+      - ../rviz_configs:/home/vxs/rviz_configs:rw
+      
+    # Keep it alive in the background
+    command: /bin/bash -c "while true; do sleep 1; done"

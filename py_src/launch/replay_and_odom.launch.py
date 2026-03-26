@@ -6,7 +6,7 @@ def generate_launch_description():
     # ==========================================
     # 1. SET YOUR PATHS HERE
     # ==========================================
-    bag_path = '../../../../../bags/lab_wire_1.5cm_1m_medium/lab_wire_1.5cm_1m_medium_0.db3' # Point this to your actual bag!
+    bag_path = '../../../../../bags/lab_wire_1.5cm_1m_slow/lab_wire_1.5cm_1m_slow_0.db3' # Point this to your actual bag!
     script_dir = '../scripts/'
 
     # ==========================================
@@ -14,7 +14,7 @@ def generate_launch_description():
     # ==========================================
     # --clock is crucial here so RViz and your nodes sync perfectly with the recorded time
     play_bag = ExecuteProcess(
-        cmd=['ros2', 'bag', 'play', bag_path, '--clock'],
+        cmd=['ros2', 'bag', 'play', bag_path, '--loop'],
         output='screen'
     )
 
@@ -26,7 +26,7 @@ def generate_launch_description():
             'python3', 'fake_odometry.py',
             '--ros-args',
             '-p', 'use_sim_time:=true',
-            '-p', 'v_x:=0.45',       # Tune your speed here
+            '-p', 'v_x:=0.2',       # Tune your speed here
             '-p', 't_start:=2.5',   # Tune start time here
             '-p', 't_stop:=9.0'     # Tune stop time here
         ],
@@ -41,7 +41,8 @@ def generate_launch_description():
         cmd=[
             'python3', 'voxel_decimator.py',
             '--ros-args',
-            '-p', 'use_sim_time:=true',
+            '-p', 'voxel_size:=0.015',
+            '-p', 'use_sim_time:=true'
         ],
         cwd=script_dir,  # This tells the launch file where to find your python script
         output='screen'

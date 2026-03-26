@@ -1,0 +1,3 @@
+[submodule "docker/VXSDK2"]
+	path = docker/VXSDK2
+	url = git@github.com:VoxelSensors/VXSDK2.git

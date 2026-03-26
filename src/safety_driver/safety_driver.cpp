@@ -116,7 +116,7 @@ namespace vxs_ros
         vxsdk::vxSetStreamingDuration(period_);
         vxsdk::vxSetBinningAmount(filtering_params_.binning_amount);
 
-        int cam_num = vxsdk::vxStartSystem(config_json_.c_str(), calib_json_.c_str(), vxsdk::pipelineType::all);
+        int cam_num = vxsdk::vxStartSystem(config_json_.c_str(), calib_json_.c_str(), vxsdk::vxFlag::XYZT);
 
         return cam_num > 0;
     }
