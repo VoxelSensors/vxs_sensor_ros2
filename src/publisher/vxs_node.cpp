@@ -16,6 +16,7 @@ namespace vxs_ros
                                                frame_polling_thread_(nullptr), //
                                                emb_comms_(nullptr),            //
                                                flag_shutdown_request_(false),  //
+                                               flag_data_ready_(false),        //
                                                flag_ref_time_initialized_(false)
 
     {
@@ -342,15 +343,36 @@ namespace vxs_ros
                 flag_update_observation_window_ = true;
             });
 
+        //! Initialize & Start the pointcloud publishing thread
+        RCLCPP_INFO_STREAM(this->get_logger(), "Starting sensor publishing thread...");
+        frame_publishing_thread_ = std::make_shared<std::thread>(std::bind(&VxsSensorPublisher::SensorPublishingLoop, this));
+        RCLCPP_INFO_STREAM(this->get_logger(), "Done.");
+
         // Initialize & start polling thread
-        RCLCPP_INFO_STREAM(this->get_logger(), "Starting publisher thread...");
+        RCLCPP_INFO_STREAM(this->get_logger(), "Starting sensor polling thread...");
         frame_polling_thread_ = std::make_shared<std::thread>(std::bind(&VxsSensorPublisher::FramePollingLoop, this));
         RCLCPP_INFO_STREAM(this->get_logger(), "Done!");
+
+        // Initialize & start the condition-variable timer thread
+        RCLCPP_INFO_STREAM(this->get_logger(), "Starting timer polling thread...");
+        timer_polling_thread_ = std::make_shared<std::thread>(std::bind(&VxsSensorPublisher::TimerPollingLoop, this));
     }
 
     VxsSensorPublisher::~VxsSensorPublisher()
     {
         flag_shutdown_request_ = true;
+        frame_queue_cv_.notify_one();
+        sensor_cv_.notify_one();
+
+        if (timer_polling_thread_)
+        {
+            if (timer_polling_thread_->joinable())
+            {
+                timer_polling_thread_->join();
+            }
+        }
+        timer_polling_thread_ = nullptr;
+
         if (frame_polling_thread_)
         {
             if (frame_polling_thread_->joinable())
@@ -359,6 +381,16 @@ namespace vxs_ros
             }
         }
         frame_polling_thread_ = nullptr;
+
+        if (frame_publishing_thread_)
+        {
+            if (frame_publishing_thread_->joinable())
+            {
+                frame_publishing_thread_->join();
+            }
+        }
+        frame_publishing_thread_ = nullptr;
+
         vxsdk::vxStopSystem();
     }
 
@@ -420,6 +452,35 @@ namespace vxs_ros
         return cam_num > 0;
     }
 
+    void *VxsSensorPublisher::GetNextSensorFrame(int &N)
+    {
+        void *frame_ptr = nullptr;
+
+        if (publish_events_) // streaming based publishing
+        {
+            vxsdk::vxXYZT *eventsXYZT = vxsdk::vxGetXYZT(N);
+            frame_ptr = N > 0 ? (void *)eventsXYZT : nullptr;
+            if (frame_ptr)
+                latest_depth_stamp_ = eventsXYZT[0].timestamp * PERIOD_75_MHZ;
+        }
+        else // Frame based data
+        {
+            // Get data from the sensor
+            long long int stamp;
+            float *frameXYZ = vxsdk::vxGetFrameXYZ(stamp);
+            if (!frameXYZ)
+                std::cerr << "NULL XYZ!\n";
+
+            // frame_ptr = stamp == 0 ? nullptr : (void *)frameXYZ;
+            frame_ptr = (void *)frameXYZ;
+
+            if (frame_ptr)
+                latest_depth_stamp_ = stamp * PERIOD_75_MHZ;
+        }
+
+        return frame_ptr;
+    }
+
     void VxsSensorPublisher::FramePollingLoop()
     {
         flag_in_polling_loop_ = true;
@@ -427,39 +488,59 @@ namespace vxs_ros
         while (!flag_shutdown_request_)
         {
             // Wait until data ready
-            while (!vxsdk::vxCheckForData())
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time_ms_));
-            }
+            std::unique_lock<std::mutex> lock(sensor_mutex_);
+            sensor_cv_.wait(lock, [this]
+                            { return flag_data_ready_.load() || flag_shutdown_request_; });
+            if (flag_shutdown_request_)
+                break;
+            flag_data_ready_ = false;
+
+            // Fill a RawSensorFrame struct.
+            RawSensorFrame frame_data;
+            frame_data.ros_stamp = this->get_clock()->now();
+            // Retrieve the pointer to the sensor frame from the SDK
+            int N;
+            void *frame_ptr = GetNextSensorFrame(N);
+
             if (publish_events_) // streaming based publishing
             {
-                int N;
-                vxsdk::vxXYZT *eventsXYZT = vxsdk::vxGetXYZT(N);
-                PublishStampedPointcloud(N, eventsXYZT);
+                frame_data.N = N * sizeof(vxsdk::vxXYZT);
+                frame_data.num_entries = N;
+                frame_data.frame_type = TSensorFrame::EventsXYZT;
             }
             else // Frame based data
             {
-                // Get data from the sensor
-                long long frame_stamp;
-                float *frameXYZ = vxsdk::vxGetFrameXYZ(frame_stamp);
                 counter++;
-                // Extract frame
-                std::vector<cv::Vec3f> points;
+                frame_data.N = 3 * SENSOR_WIDTH * SENSOR_HEIGHT * sizeof(float); // NOTE: The 3 here is for the 3 coordinates of the 3D point.
+                frame_data.num_entries = SENSOR_WIDTH * SENSOR_HEIGHT;
+                frame_data.frame_type = TSensorFrame::FrameXYZ;
+            }
+            // If frame has data, spool them for publishing
+            if (frame_ptr)
+            {
+                sensor_ref_time_ = latest_depth_stamp_;
 
-                cv::Mat frame = UnpackFrameSensorData(frameXYZ, points);
-                //   Publish sensor data as a depth image
-                if (publish_depth_image_)
+                if (!flag_ref_time_initialized_)
                 {
-                    PublishDepthImage(frame);
+                    flag_ref_time_initialized_ = true;
                 }
-                if (publish_pointcloud_)
+                // Copy into the frame queue and release the publishing thread
+                frame_data.data = std::make_shared<std::vector<uint8_t>>();
+                frame_data.data->resize(frame_data.N);
+
+                std::memcpy((void *)&(*frame_data.data)[0], frame_ptr, frame_data.N);
+
+                std::unique_lock<std::mutex> lock(frame_queue_mutex_);
+                if (frame_queue_.size() >= MAX_QUEUE_DEPTH)
                 {
-                    PublishPointcloud(points);
+                    frame_queue_.pop();
                 }
+                frame_queue_.push(frame_data);
+                frame_queue_cv_.notify_one();
             }
 
-            // Check for imu samples
-            if (publish_imu_)
+            // Check for imu samples. Do this without a worker thread
+            if (publish_imu_ && frame_ptr)
             {
                 std::vector<imu::IMUSample> imu_samples;
                 int num_samples;
@@ -471,23 +552,11 @@ namespace vxs_ros
                 }
                 if (num_samples > 0)
                 {
-                    // Check if reference time is initialized. @TODO: It should not jappen because IMU is available only in streaming mode
-                    {
-                        std::unique_lock<std::shared_timed_mutex> lock(ref_time_mutex_);
-                        if (!flag_ref_time_initialized_)
-                        {
-                            const double ref_time_secs = this->get_clock()->now().seconds() - (imu_samples.rbegin()->stamp_seconds - imu_samples[0].stamp_seconds);
-                            const int32_t ref_time_sec_part = static_cast<int32_t>(ref_time_secs);
-                            const int64_t ref_time_nsec_part = static_cast<int64_t>((ref_time_secs - ref_time_sec_part) * 1e9);
-                            ref_time_ = rclcpp::Time(ref_time_sec_part, ref_time_nsec_part);
-                            sensor_ref_time_ = imu_samples[0].stamp_seconds;
-                            flag_ref_time_initialized_ = true;
-                        }
-                    }
-                    // Now publish imu readings
                     for (int i = 0; i < num_samples; i++)
                     {
-                        PublishIMUSample(imu_samples[i]);
+                        //@ TODO: Careful here... The frame_data.rosstamp is the ros time **shortly after data became available**
+                        rclcpp::Time stamp = frame_data.ros_stamp + rclcpp::Duration::from_seconds(imu_samples[i].stamp_seconds - sensor_ref_time_);
+                        PublishIMUSample(imu_samples[i], stamp);
                     }
                 }
             }
@@ -499,6 +568,80 @@ namespace vxs_ros
             }
         }
         flag_in_polling_loop_ = false;
+    }
+
+    void VxsSensorPublisher::TimerPollingLoop()
+    {
+        // A smarter sleep time: If FPS is 30 (33ms period), checking every 4-5ms is plenty fast
+        // and cuts your CPU usage by 80% compared to 1ms.
+        int smart_sleep_ms = period_ / 8;
+        if (smart_sleep_ms < 1)
+            smart_sleep_ms = 1;
+        std::cout << "Hald period: " << (period_ / 2) << std::endl;
+        std::cout << "smart sleep period: " << smart_sleep_ms << std::endl;
+        while (!flag_shutdown_request_)
+        {
+            if (vxsdk::vxCheckForData())
+            {
+                flag_data_ready_ = true;
+                // Data is ready! Wake up the FramePollingLoop
+                sensor_cv_.notify_one();
+
+                // Optional: Sleep for almost a full frame period to avoid redundant checks
+                // while the other thread processes the frame.
+                std::this_thread::sleep_for(std::chrono::milliseconds(period_ / 2));
+            }
+            else
+            {
+                // No data yet, sleep like an OpenGL timer callback
+                std::this_thread::sleep_for(std::chrono::milliseconds(smart_sleep_ms));
+            }
+        }
+    }
+
+    void VxsSensorPublisher::SensorPublishingLoop()
+    {
+        while (!flag_shutdown_request_)
+        {
+            RawSensorFrame frame_data;
+            {
+                std::unique_lock<std::mutex> lock(frame_queue_mutex_);
+                frame_queue_cv_.wait(lock, [this]
+                                     { return !frame_queue_.empty() || flag_shutdown_request_; });
+                if (frame_queue_.empty())
+                    continue;
+
+                frame_data = frame_queue_.front();
+                frame_queue_.pop();
+
+                if (publish_events_) // streaming based publishing
+                {
+                    vxsdk::vxXYZT *eventsXYZT = (vxsdk::vxXYZT *)&(*frame_data.data)[0];
+                    if (frame_data.N > 0)
+                    {
+                        PublishStampedPointcloud(frame_data.num_entries, eventsXYZT, frame_data.ros_stamp);
+                    }
+                }
+                else // Frame based data
+                {
+                    // Get data from the sensor
+                    float *frameXYZ = (float *)&(*frame_data.data)[0];
+                    // Extract frame
+                    std::vector<cv::Vec3f> points;
+
+                    cv::Mat frame = UnpackFrameSensorData(frameXYZ, points);
+                    // Publish sensor data as a depth image
+                    if (publish_depth_image_)
+                    {
+                        PublishDepthImage(frame, frame_data.ros_stamp);
+                    }
+                    if (publish_pointcloud_)
+                    {
+                        PublishPointcloud(points, frame_data.ros_stamp);
+                    }
+                }
+            }
+        }
     }
 
     cv::Mat VxsSensorPublisher::UnpackFrameSensorData(float *frameXYZ, std::vector<cv::Vec3f> &points)
@@ -572,13 +715,13 @@ namespace vxs_ros
         cams_[1].image_size = cv::Size_<int>(cam2["SensorSize"]["Width"], cam2["SensorSize"]["Height"]);
     }
 
-    void VxsSensorPublisher::PublishDepthImage(const cv::Mat &depth_image)
+    void VxsSensorPublisher::PublishDepthImage(const cv::Mat &depth_image, const rclcpp::Time &stamp)
     {
         // cv_bridge::CvImagePtr cv_ptr;
         //  NOTE: See http://docs.ros.org/en/lunar/api/cv_bridge/html/c++/cv__bridge_8cpp_source.html
         //        for image encoding constants in cv_bridge
         auto depth_header = std_msgs::msg::Header();
-        depth_header.stamp = this->get_clock()->now();
+        depth_header.stamp = stamp;
         depth_header.frame_id = "sensor";
         sensor_msgs::msg::Image::SharedPtr depth_image_msg =
             cv_bridge::CvImage(                       //
@@ -619,13 +762,13 @@ namespace vxs_ros
         cam_info_publisher_->publish(*cam_info_msg.get());
     }
 
-    void VxsSensorPublisher::PublishPointcloud(const std::vector<cv::Vec3f> &points)
+    void VxsSensorPublisher::PublishPointcloud(const std::vector<cv::Vec3f> &points, const rclcpp::Time &stamp)
     {
         sensor_msgs::msg::PointCloud2::SharedPtr msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
 
         // Set the header
         auto pcloud_header = std_msgs::msg::Header();
-        pcloud_header.stamp = this->get_clock()->now();
+        pcloud_header.stamp = stamp;
         pcloud_header.frame_id = "sensor";
         msg->header = pcloud_header;
         // Unordered pointcloud. Height is 1 and Width is the size (N)
@@ -671,13 +814,13 @@ namespace vxs_ros
         pcloud_publisher_->publish(*msg.get());
     }
 
-    void VxsSensorPublisher::PublishStampedPointcloud(const int N, vxsdk::vxXYZT *eventsXYZT)
+    void VxsSensorPublisher::PublishStampedPointcloud(const int N, vxsdk::vxXYZT *eventsXYZT, const rclcpp::Time &cloud_stamp)
     {
         sensor_msgs::msg::PointCloud2::SharedPtr msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
 
         // Set the header
         auto evcloud_header = std_msgs::msg::Header();
-        evcloud_header.stamp = this->get_clock()->now();
+        evcloud_header.stamp = cloud_stamp;
         evcloud_header.frame_id = "sensor";
         msg->header = evcloud_header;
         // Unordered pointcloud. Height is 1 and Width is the size (N)
@@ -715,6 +858,7 @@ namespace vxs_ros
         msg->data.resize(msg->row_step * msg->height);
 
         // Populate the point cloud data
+        const double ref_stamp = eventsXYZT[0].timestamp * PERIOD_75_MHZ;
         uint8_t *ptr = &msg->data[0];
         for (size_t i = 0; i < msg->width; ++i)
         {
@@ -722,22 +866,18 @@ namespace vxs_ros
             point[0] = eventsXYZT[i].x; // X coordinate
             point[1] = eventsXYZT[i].y; // Y coordinate
             point[2] = eventsXYZT[i].z; // Z coordinate
-            *(double *)(ptr + t.offset) = *(double *)&(eventsXYZT[i].timestamp);
+            //*reinterpret_cast<double *>(ptr + t.offset) = *(double *)&(eventsXYZT[i].timestamp);
+            // @TODO: Assign aligned time to the ros time to avoid HW clock drifting
+            *reinterpret_cast<double *>(ptr + t.offset) = eventsXYZT[i].timestamp * PERIOD_75_MHZ - ref_stamp + cloud_stamp.seconds(); // relative to ros message stamp
             ptr += msg->point_step;
         }
         evcloud_publisher_->publish(*msg.get());
     }
 
-    void VxsSensorPublisher::PublishIMUSample(const imu::IMUSample &sample)
+    void VxsSensorPublisher::PublishIMUSample(const imu::IMUSample &sample, const rclcpp::Time &stamp)
     {
         sensor_msgs::msg::Imu imu_msg;
-        // 1. Work out time in seconds
-        const double time_in_secs = ref_time_.seconds() + sample.stamp_seconds - sensor_ref_time_;
-        // 2. Extract integer part of seconds
-        const int32_t second_part = static_cast<int32_t>(time_in_secs);
-        // 3. get the nanosecond part as in64
-        const int64_t nanosecond_part = static_cast<int64_t>((time_in_secs - second_part) * 1e9);
-        imu_msg.header.stamp = rclcpp::Time(second_part, nanosecond_part);
+        imu_msg.header.stamp = stamp;
         imu_msg.header.frame_id = "IMU";
 
         //@TODO: Find covariance values from IMU manufacturer
