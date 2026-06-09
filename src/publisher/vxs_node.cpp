@@ -577,6 +577,8 @@ namespace vxs_ros
         int smart_sleep_ms = period_ / 8;
         if (smart_sleep_ms < 1)
             smart_sleep_ms = 1;
+        std::cout << "Hald period: " << (period_ / 2) << std::endl;
+        std::cout << "smart sleep period: " << smart_sleep_ms << std::endl;
         while (!flag_shutdown_request_)
         {
             if (vxsdk::vxCheckForData())
