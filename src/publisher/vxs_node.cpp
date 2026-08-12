@@ -30,6 +30,7 @@ namespace vxs_ros
         this->declare_parameter("publish_depth_image", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_pointcloud", rclcpp::PARAMETER_BOOL);
         this->declare_parameter("publish_events", rclcpp::PARAMETER_BOOL);
+
         this->declare_parameter("fps", rclcpp::PARAMETER_INTEGER);
         this->declare_parameter("config_json", rclcpp::PARAMETER_STRING);
         this->declare_parameter("calib_json", rclcpp::PARAMETER_STRING);
@@ -363,7 +364,12 @@ namespace vxs_ros
 
     bool VxsSensorPublisher::InitSensor()
     {
+        // Detect sensor
+        vxsdk::vxCameraType cam_type = vxsdk::vxDetectCameras();
+        CV_Assert(cam_type != vxsdk::vxCameraType::none && "Failed detecting a camera type.");
+
         static constexpr uint32_t transfer_size = 2 * 1024 * 1024;
+
         if (embedded_triangulation_mode_)
         {
             RCLCPP_INFO_STREAM(this->get_logger(), "Initializing embedded triamgulation comms mode.");
@@ -376,18 +382,21 @@ namespace vxs_ros
         }
 
         RCLCPP_INFO_STREAM(this->get_logger(), "Initializing standard SDK comms.");
-
         // Set the frame rate (or time window)
-        vxsdk::pipelineType pipeline_type;
+        vxsdk::vxFlag init_flags;
         if (publish_events_)
         {
-            pipeline_type = vxsdk::pipelineType::all; // Get everything out XYT-XYT pairs and XYZT
+            init_flags = vxsdk::vxFlag::XYZT;
             vxsdk::vxSetStreamingDuration(period_);
         }
         else
         {
-            pipeline_type = vxsdk::pipelineType::fbPointcloud;
+            init_flags = vxsdk::vxFlag::FBPOINTCLOUD;
             vxsdk::vxSetFPS(fps_);
+        }
+        if (publish_imu_)
+        {
+            init_flags = init_flags | vxsdk::vxFlag::IMU;
         }
 
         // Set filtering parameters
@@ -405,7 +414,8 @@ namespace vxs_ros
         int cam_num = vxsdk::vxStartSystem( //
             config_json_.c_str(),           //
             calib_json_.c_str(),            //
-            pipeline_type);
+            init_flags,
+            cam_type);
 
         return cam_num > 0;
     }
@@ -430,7 +440,8 @@ namespace vxs_ros
             else // Frame based data
             {
                 // Get data from the sensor
-                float *frameXYZ = vxsdk::vxGetFrameXYZ();
+                long long frame_stamp;
+                float *frameXYZ = vxsdk::vxGetFrameXYZ(frame_stamp);
                 counter++;
                 // Extract frame
                 std::vector<cv::Vec3f> points;
